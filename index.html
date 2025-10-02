@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buscar actividades por VIN</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    /* Mantener consistencia visual con plugin.js (cards, headers) */
+    .contenedor-actividad { border: 1px solid #e3e3e3; border-radius: 6px; margin-bottom: 12px; }
+    .card-header.custom { background: #007bff; color: #fff; padding: 8px 12px; font-weight: 600; }
+    .panel-body { padding: 12px; }
+    .group-header { font-weight: 700; font-size: 0.95rem; }
+    .item-row { padding: 6px 8px; border-bottom: 1px solid #f1f1f1; display:flex; align-items:center; }
+    .item-row:last-child { border-bottom: none; }
+    .item-meta { flex:1; }
+    .selected { background: #e9f7ef; }
+    .small-muted { color:#666; font-size:0.9rem }
+  </style>
+</head>
+<body class="p-3">
+  <div class="container">
+    <div class="row mb-3">
+      <div class="col-12">
+        <h4>Buscar actividades por VIN 🔎</h4>
+        <p class="small-muted">Introduce una fracción del VIN y pulsa Buscar. Usa la autorización del plugin si está disponible.</p>
+      </div>
+    </div>
+
+    <div class="row align-items-end mb-3">
+      <div class="col-md-5">
+        <label for="vinInput">VIN (o fragmento)</label>
+        <input id="vinInput" class="form-control" placeholder="Ej: 72894 o 3N1CK3CD" />
+      </div>
+      <div class="col-md-4">
+        <label for="authInput">Authorization (opcional)</label>
+        <input id="authInput" class="form-control" placeholder="Basic ... (si no hay sesión)" />
+        <small class="form-text text-muted">Si existe en sessionStorage usa la clave 'Autorizacion' automáticamente.</small>
+      </div>
+      <div class="col-md-3 text-right">
+        <button id="useSessionAuth" class="btn btn-outline-secondary mb-2">Usar auth de sesión</button>
+        <button id="searchBtn" class="btn btn-primary btn-block">Buscar</button>
+      </div>
+    </div>
+
+    <div class="row mb-2">
+      <div class="col-12">
+        <div id="statusArea" class="mb-2"></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-12">
+        <div id="results"></div>
+      </div>
+    </div>
+
+    <div class="row mt-3">
+      <div class="col-12">
+        <div id="selectionArea" class="p-3 border rounded" style="display:none;">
+          <h5>Registro seleccionado ✅</h5>
+          <div id="selectedDetails"></div>
+          <div class="mt-2">
+            <button id="confirmBtn" class="btn btn-success">Confirmar selección</button>
+            <button id="clearSelection" class="btn btn-outline-secondary">Limpiar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="mt-4 small text-muted">Plugin ligero para Oracle Field Service — interfaz de búsqueda por VIN</footer>
+  </div>
+
+  <script src="search.js"></script>
+</body>
+</html>
