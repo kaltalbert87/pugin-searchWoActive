@@ -181,10 +181,7 @@ function doSearch() {
       mainContent.style.display = 'block';
       noResults.style.display = 'none';
       resultsHeader.style.display = 'flex';
-      resultsSummary.innerHTML = `
-        <span class="results-count">${lastResults.length} registros en ${Object.keys(grouped).length} agrupaciones</span>
-      `;
-      setStatus('Encontrados ' + lastResults.length + ' registros en ' + Object.keys(grouped).length + ' agrupaciones', 'success');
+      setStatus(lastResults.length + ' registros encontrados', 'success');
 
     } else {
       setStatus('Error en la petición: ' + this.status, 'danger');
@@ -236,14 +233,18 @@ function renderGroups(grouped) {
         <div class="activity-details">
 
           
-          <div class="detail-item">
-            <span class="detail-icon">🏢</span>
-            <span class="detail-label">Cliente:</span>
-            <span>${group.meta.account}</span>
-          </div>
+
           
           <div class="detail-item">
             <div class="mini-cards">
+              <div class="mini-card card l-bg-cyan client">
+                <span class="icon">🏢</span>
+                <div>
+                  <div class="label">Cliente</div>
+                  <div class="value">${group.meta.account}</div>
+                </div>
+              </div>
+
               <div class="mini-card card l-bg-blue-dark">
                 <span class="icon">🚗</span>
                 <div>
@@ -265,7 +266,7 @@ function renderGroups(grouped) {
           <div class="detail-item">
             <span class="detail-icon">📋</span>
             <span class="detail-label">Actividades:</span>
-            <span>${group.entries.map(e => e.woaNumber).join(', ')}</span>
+            <span>${group.entries.map(e => (e.activity || '-') + ' (' + (e.deviceType || '-') + ')').join(', ')}</span>
           </div>
         </div>
       </div>
@@ -331,15 +332,13 @@ function selectGroup(element, groupIndex, groupDataStr) {
       </div>
     </div>
     
-    ${group.entries.length > 0 ? `
+        ${group.entries.length > 0 ? `
       <div style="margin-top: 1rem;">
         <h6 style="color: var(--text-primary); margin-bottom: 0.5rem;">Detalles de Órdenes:</h6>
         ${group.entries.map(entry => `
           <div style="background: var(--bg-secondary); padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 4px; font-size: 0.8rem;">
-            <strong>WOA:</strong> ${entry.woaNumber} | 
             <strong>WO:</strong> ${entry.woNumber} | 
-            <strong>Dispositivo:</strong> ${entry.deviceType} | 
-            <strong>Actividad:</strong> ${entry.activity}
+            <strong>Actividad:</strong> ${(entry.activity || '-') + ' (' + (entry.deviceType || '-') + ')'}
           </div>
         `).join('')}
       </div>
