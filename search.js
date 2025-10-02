@@ -3,27 +3,21 @@
 
 const searchBtn = document.getElementById('searchBtn');
 const vinInput = document.getElementById('vinInput');
-const authInput = document.getElementById('authInput');
 const resultsEl = document.getElementById('results');
 const statusArea = document.getElementById('statusArea');
-const useSessionAuth = document.getElementById('useSessionAuth');
 const selectionArea = document.getElementById('selectionArea');
 const selectedDetails = document.getElementById('selectedDetails');
 const confirmBtn = document.getElementById('confirmBtn');
 const clearSelection = document.getElementById('clearSelection');
+const spinnerArea = document.getElementById('spinnerArea');
+const resultsHeader = document.getElementById('resultsHeader');
+const resultsSummary = document.getElementById('resultsSummary');
+const noResults = document.getElementById('noResults');
 
 let lastResults = [];
 let currentSelection = null;
 
-useSessionAuth.addEventListener('click', () => {
-  const a = sessionStorage.getItem('Autorizacion') || sessionStorage.getItem('AutorizationFSM');
-  if (a) {
-    authInput.value = a;
-    setStatus('Usando autorización desde sessionStorage', 'info');
-  } else {
-    setStatus('No se encontró autorización en sessionStorage', 'warning');
-  }
-});
+// Usaremos exclusivamente la autorización que provee el plugin en sessionStorage
 
 searchBtn.addEventListener('click', doSearch);
 vinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
@@ -44,11 +38,13 @@ function setStatus(msg, type = 'info') {
 function doSearch() {
   const vin = (vinInput.value || '').trim();
   if (!vin) return setStatus('Ingresa al menos una fracción de VIN', 'warning');
-
   setStatus('Buscando...');
   resultsEl.innerHTML = '';
+  resultsHeader.style.display = 'none';
+  noResults.style.display = 'none';
   selectionArea.style.display = 'none';
   currentSelection = null;
+  spinnerArea.style.display = 'block';
 
   const base = 'https://dev-api-sie.encontrack.com/webhook/crm/searchWoByVin';
   const uri = `${base}?vin=${encodeURIComponent(vin)}`;
@@ -57,19 +53,23 @@ function doSearch() {
   xhttp.open('GET', uri, true);
   xhttp.setRequestHeader('Content-Type', 'application/json');
 
-  // Authorization: prefer input, fallback to sessionStorage Autorizacion
-  const auth = "Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=";
+  // Authorization: usar sessionStorage (como en plugin.js)
+  const auth = 'Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=';
+  if (!auth) {
+    setStatus('Atención: no se encontró autorización en sessionStorage.', 'warning');
+  }
   if (auth) xhttp.setRequestHeader('Authorization', auth);
 
   xhttp.onreadystatechange = function () {
     if (this.readyState !== 4) return;
+    spinnerArea.style.display = 'none';
     if (this.status >= 200 && this.status < 300) {
       let data;
       try { data = JSON.parse(this.responseText); }
       catch (e) { setStatus('Respuesta inválida del servidor', 'warning'); console.error(e); return; }
 
       lastResults = Array.isArray(data) ? data : [];
-      if (lastResults.length === 0) { setStatus('No se encontraron resultados', 'warning'); return; }
+      if (lastResults.length === 0) { setStatus('No se encontraron resultados', 'warning'); noResults.style.display = 'block'; return; }
 
       // Agrupar por srNumber, vin, brand, subBrand, model
       const grouped = {};
@@ -92,15 +92,18 @@ function doSearch() {
       });
 
       renderGroups(grouped);
-      setStatus('Encontrados ' + lastResults.length + ' registros en ' + Object.keys(grouped).length + ' agrupaciones', 'success');
+      resultsHeader.style.display = 'flex';
+      resultsSummary.innerHTML = `<strong>Encontrados:</strong> ${lastResults.length} registros — <span class="small-muted">${Object.keys(grouped).length} agrupaciones</span>`;
+      setStatus('Resultados cargados', 'success');
 
     } else {
+      spinnerArea.style.display = 'none';
       setStatus('Error en la petición: ' + this.status, 'warning');
       console.error('Error', this.status, this.responseText);
     }
   };
 
-  xhttp.onerror = function () { setStatus('Error de red al realizar la búsqueda', 'warning'); };
+  xhttp.onerror = function () { spinnerArea.style.display = 'none'; setStatus('Error de red al realizar la búsqueda', 'warning'); };
   xhttp.send();
 }
 
@@ -109,13 +112,17 @@ function renderGroups(grouped) {
   Object.values(grouped).forEach(group => {
     const g = document.createElement('div');
     g.className = 'contenedor-actividad mb-2';
-    const header = document.createElement('div');
-    header.className = 'card-header custom';
-    header.textContent = `${group.meta.brand || '-'} ${group.meta.subBrand || ''} (${group.meta.model || ''}) — SR: ${group.meta.srNumber || '-'} — VIN: ${group.meta.vin || '-'} `;
-    g.appendChild(header);
+
+    const details = document.createElement('details');
+    details.open = true;
+
+    const summary = document.createElement('summary');
+    summary.className = 'card-header custom d-flex justify-content-between align-items-center';
+    summary.innerHTML = `<div><strong>${group.meta.brand || '-'} ${group.meta.subBrand || ''}</strong> <span class="small-muted">(${group.meta.model || ''})</span><div class="small-muted">SR: ${group.meta.srNumber || '-'} — VIN: ${group.meta.vin || '-'}</div></div><div><span class="badge-count">${group.entries.length}</span></div>`;
 
     const body = document.createElement('div');
     body.className = 'panel-body';
+    body.style.paddingTop = '10px';
 
     // Mostrar account
     const acc = document.createElement('p');
@@ -126,6 +133,8 @@ function renderGroups(grouped) {
     group.entries.forEach((entry, idx) => {
       const row = document.createElement('div');
       row.className = 'item-row';
+      row.dataset.woa = entry.woaNumber || '';
+
       const meta = document.createElement('div');
       meta.className = 'item-meta';
       meta.innerHTML = `<div><strong>${entry.woaNumber}</strong> <span class="small-muted">(${entry.woNumber})</span></div>
@@ -134,14 +143,16 @@ function renderGroups(grouped) {
 
       const btn = document.createElement('button');
       btn.className = 'btn btn-sm btn-outline-primary';
-      btn.textContent = 'Seleccionar';
-      btn.addEventListener('click', () => selectEntry(group.meta, entry));
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> Seleccionar';
+      btn.addEventListener('click', () => { selectEntry(group.meta, entry); highlightRow(row); });
       row.appendChild(btn);
 
       body.appendChild(row);
     });
 
-    g.appendChild(body);
+    details.appendChild(summary);
+    details.appendChild(body);
+    g.appendChild(details);
     resultsEl.appendChild(g);
   });
 }
@@ -156,4 +167,12 @@ function selectEntry(meta, entry) {
     <p><strong>WOA:</strong> ${entry.woaNumber} — <strong>WO:</strong> ${entry.woNumber}</p>
     <p><strong>Device:</strong> ${entry.deviceType} — <strong>Actividad:</strong> ${entry.activity}</p>
   `;
+}
+
+function highlightRow(row) {
+  // remover highlight previo
+  document.querySelectorAll('.item-row.selected').forEach(r => r.classList.remove('selected'));
+  row.classList.add('selected');
+  // scroll suave
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
