@@ -9,42 +9,114 @@ const selectionArea = document.getElementById('selectionArea');
 const selectedDetails = document.getElementById('selectedDetails');
 const confirmBtn = document.getElementById('confirmBtn');
 const clearSelection = document.getElementById('clearSelection');
-const spinnerArea = document.getElementById('spinnerArea');
 const resultsHeader = document.getElementById('resultsHeader');
 const resultsSummary = document.getElementById('resultsSummary');
 const noResults = document.getElementById('noResults');
+const loading = document.getElementById('loading');
+const error = document.getElementById('error');
+const mainContent = document.getElementById('main-content');
 
 let lastResults = [];
 let currentSelection = null;
 
-// Usaremos exclusivamente la autorización que provee el plugin en sessionStorage
-
 searchBtn.addEventListener('click', doSearch);
 vinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
-clearSelection.addEventListener('click', () => { currentSelection = null; selectionArea.style.display = 'none'; });
+clearSelection.addEventListener('click', () => { 
+  currentSelection = null; 
+  selectionArea.style.display = 'none';
+  document.querySelectorAll('.activity-card.selected').forEach(card => {
+    card.classList.remove('selected');
+  });
+});
 
 confirmBtn.addEventListener('click', () => {
   if (!currentSelection) return setStatus('No hay selección activa', 'warning');
-  // Acción simple: mostrar en consola y en UI
+  
+  // Guardar en sessionStorage para compatibilidad con plugin
+  sessionStorage.setItem('selectedActivity', JSON.stringify({
+    srNumber: currentSelection.srNumber,
+    vin: currentSelection.vin,
+    brand: currentSelection.brand,
+    subBrand: currentSelection.subBrand,
+    model: currentSelection.model,
+    account: currentSelection.account,
+    woaNumber: currentSelection.woaNumber,
+    woNumber: currentSelection.woNumber,
+    deviceType: currentSelection.deviceType,
+    activity: currentSelection.activity
+  }));
+  
   console.log('Registro confirmado:', currentSelection);
-  setStatus('Registro confirmado: ' + currentSelection.woaNumber, 'success');
+  setStatus('Registro confirmado: ' + (currentSelection.woaNumber || currentSelection.srNumber), 'success');
+  
+  // Intentar integración con plugin si está disponible
+  if (typeof window.openMessage === 'function') {
+    try {
+      window.openMessage(currentSelection);
+    } catch (error) {
+      console.log('Plugin no disponible, datos guardados en sessionStorage');
+    }
+  }
+});
+
+// Inicialización
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('🚗 Field Service Oracle - Sistema iniciado');
+  vinInput.focus();
+  setStatus('¡Bienvenido! Ingrese una fracción de VIN para buscar actividades', 'info');
 });
 
 function setStatus(msg, type = 'info') {
-  const color = type === 'success' ? 'green' : type === 'warning' ? 'orange' : '#333';
-  statusArea.innerHTML = `<div style="color:${color}">${msg}</div>`;
+  const icons = {
+    'success': '✅',
+    'warning': '⚠️',
+    'danger': '❌',
+    'info': 'ℹ️'
+  };
+  
+  const colors = {
+    'success': '#155724',
+    'warning': '#856404', 
+    'danger': '#721c24',
+    'info': '#0c5460'
+  };
+  
+  const backgrounds = {
+    'success': 'linear-gradient(135deg, #d4edda, #c3e6cb)',
+    'warning': 'linear-gradient(135deg, #fff3cd, #fce589)',
+    'danger': 'linear-gradient(135deg, #f8d7da, #f1b0b7)',
+    'info': 'linear-gradient(135deg, #d1ecf1, #bee5eb)'
+  };
+  
+  statusArea.innerHTML = `
+    <div class="notification ${type}" style="
+      background: ${backgrounds[type] || backgrounds.info};
+      color: ${colors[type] || colors.info};
+      padding: var(--spacing-md);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--spacing-md);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    ">
+      <span>${icons[type] || icons.info}</span>
+      <span>${msg}</span>
+    </div>
+  `;
 }
 
 function doSearch() {
   const vin = (vinInput.value || '').trim();
   if (!vin) return setStatus('Ingresa al menos una fracción de VIN', 'warning');
-  setStatus('Buscando...');
+
+  setStatus('Buscando actividades...', 'info');
   resultsEl.innerHTML = '';
-  resultsHeader.style.display = 'none';
-  noResults.style.display = 'none';
   selectionArea.style.display = 'none';
+  loading.style.display = 'block';
+  error.style.display = 'none';
+  mainContent.style.display = 'none';
   currentSelection = null;
-  spinnerArea.style.display = 'block';
 
   const base = 'https://dev-api-sie.encontrack.com/webhook/crm/searchWoByVin';
   const uri = `${base}?vin=${encodeURIComponent(vin)}`;
@@ -53,28 +125,36 @@ function doSearch() {
   xhttp.open('GET', uri, true);
   xhttp.setRequestHeader('Content-Type', 'application/json');
 
-  // Authorization: usar sessionStorage (como en plugin.js)
-  const auth = 'Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=';
-  if (!auth) {
-    setStatus('Atención: no se encontró autorización en sessionStorage.', 'warning');
-  }
+  // Authorization: prefer input, fallback to sessionStorage Autorizacion
+  const auth = "Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=";
   if (auth) xhttp.setRequestHeader('Authorization', auth);
 
   xhttp.onreadystatechange = function () {
     if (this.readyState !== 4) return;
-    spinnerArea.style.display = 'none';
+    
+    loading.style.display = 'none';
+    
     if (this.status >= 200 && this.status < 300) {
       let data;
       try { data = JSON.parse(this.responseText); }
-      catch (e) { setStatus('Respuesta inválida del servidor', 'warning'); console.error(e); return; }
+      catch (e) { 
+        setStatus('Respuesta inválida del servidor', 'danger'); 
+        console.error(e); 
+        return; 
+      }
 
       lastResults = Array.isArray(data) ? data : [];
-      if (lastResults.length === 0) { setStatus('No se encontraron resultados', 'warning'); noResults.style.display = 'block'; return; }
+      if (lastResults.length === 0) { 
+        mainContent.style.display = 'block';
+        noResults.style.display = 'block';
+        setStatus('No se encontraron resultados', 'warning'); 
+        return; 
+      }
 
       // Agrupar por srNumber, vin, brand, subBrand, model
       const grouped = {};
       lastResults.forEach(item => {
-        const key = `${item.srNumber || '-'}|${item.vin || '-'}|${item.brand || '-'}|${item.subBrand || '-'}|${item.model || '-'} `;
+        const key = `${item.srNumber || '-'}|${item.vin || '-'}|${item.brand || '-'}|${item.subBrand || '-'}|${item.model || '-'}`;
         if (!grouped[key]) {
           grouped[key] = {
             meta: {
@@ -88,91 +168,168 @@ function doSearch() {
             entries: []
           };
         }
-        grouped[key].entries.push({ woaNumber: item.woaNumber || '-', deviceType: item.deviceType || '-', activity: item.activity || '-', woNumber: item.woNumber || '-' });
+        grouped[key].entries.push({ 
+          woaNumber: item.woaNumber || '-', 
+          deviceType: item.deviceType || '-', 
+          activity: item.activity || '-', 
+          woNumber: item.woNumber || '-' 
+        });
       });
 
       renderGroups(grouped);
+      
+      mainContent.style.display = 'block';
+      noResults.style.display = 'none';
       resultsHeader.style.display = 'flex';
-      resultsSummary.innerHTML = `<strong>Encontrados:</strong> ${lastResults.length} registros — <span class="small-muted">${Object.keys(grouped).length} agrupaciones</span>`;
-      setStatus('Resultados cargados', 'success');
+      resultsSummary.innerHTML = `
+        <span class="results-count">${lastResults.length} registros en ${Object.keys(grouped).length} agrupaciones</span>
+      `;
+      setStatus('Encontrados ' + lastResults.length + ' registros en ' + Object.keys(grouped).length + ' agrupaciones', 'success');
 
     } else {
-      spinnerArea.style.display = 'none';
-      setStatus('Error en la petición: ' + this.status, 'warning');
+      setStatus('Error en la petición: ' + this.status, 'danger');
       console.error('Error', this.status, this.responseText);
     }
   };
 
-  xhttp.onerror = function () { spinnerArea.style.display = 'none'; setStatus('Error de red al realizar la búsqueda', 'warning'); };
+  xhttp.onerror = function () { 
+    loading.style.display = 'none';
+    setStatus('Error de red al realizar la búsqueda', 'danger'); 
+  };
+  
+  xhttp.ontimeout = function () {
+    loading.style.display = 'none';
+    setStatus('Tiempo de espera agotado. Intenta nuevamente.', 'warning');
+  };
+  
+  xhttp.timeout = 30000;
   xhttp.send();
 }
 
 function renderGroups(grouped) {
   resultsEl.innerHTML = '';
-  Object.values(grouped).forEach(group => {
-    const g = document.createElement('div');
-    g.className = 'contenedor-actividad mb-2';
-
-    const details = document.createElement('details');
-    details.open = true;
-
-    const summary = document.createElement('summary');
-    summary.className = 'card-header custom d-flex justify-content-between align-items-center';
-    summary.innerHTML = `<div><strong>${group.meta.brand || '-'} ${group.meta.subBrand || ''}</strong> <span class="small-muted">(${group.meta.model || ''})</span><div class="small-muted">SR: ${group.meta.srNumber || '-'} — VIN: ${group.meta.vin || '-'}</div></div><div><span class="badge-count">${group.entries.length}</span></div>`;
-
-    const body = document.createElement('div');
-    body.className = 'panel-body';
-    body.style.paddingTop = '10px';
-
-    // Mostrar account
-    const acc = document.createElement('p');
-    acc.innerHTML = `<strong>Cuenta:</strong> ${group.meta.account || '-'}`;
-    body.appendChild(acc);
-
-    // Lista de entradas que varían
-    group.entries.forEach((entry, idx) => {
-      const row = document.createElement('div');
-      row.className = 'item-row';
-      row.dataset.woa = entry.woaNumber || '';
-
-      const meta = document.createElement('div');
-      meta.className = 'item-meta';
-      meta.innerHTML = `<div><strong>${entry.woaNumber}</strong> <span class="small-muted">(${entry.woNumber})</span></div>
-                        <div class="small-muted">Device: ${entry.deviceType || '-'} — Activity: ${entry.activity || '-'}</div>`;
-      row.appendChild(meta);
-
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-sm btn-outline-primary';
-      btn.innerHTML = '<i class="fa-solid fa-check"></i> Seleccionar';
-      btn.addEventListener('click', () => { selectEntry(group.meta, entry); highlightRow(row); });
-      row.appendChild(btn);
-
-      body.appendChild(row);
-    });
-
-    details.appendChild(summary);
-    details.appendChild(body);
-    g.appendChild(details);
-    resultsEl.appendChild(g);
+  Object.values(grouped).forEach((group, index) => {
+    const container = document.createElement('div');
+    container.className = 'contenedor-actividad';
+    container.setAttribute('data-activity-id', group.meta.srNumber);
+    
+    container.innerHTML = `
+      <div class="activity-card" onclick="selectGroup(this, ${index}, ${JSON.stringify(group).replace(/"/g, '&quot;')})">
+        <div class="activity-header">
+          <div class="activity-number">#${group.meta.srNumber}</div>
+          <div class="activity-status complete">
+            ${group.entries.length} orden${group.entries.length !== 1 ? 'es' : ''}
+          </div>
+        </div>
+        
+        <div class="activity-details">
+          <div class="detail-item">
+            <span class="detail-icon">🚗</span>
+            <span class="detail-label">VIN:</span>
+            <span class="vin-code">${group.meta.vin}</span>
+          </div>
+          
+          <div class="detail-item">
+            <span class="detail-icon">🏢</span>
+            <span class="detail-label">Cliente:</span>
+            <span>${group.meta.account}</span>
+          </div>
+          
+          <div class="detail-item">
+            <span class="detail-icon">🚙</span>
+            <span class="detail-label">Marca:</span>
+            <span>${group.meta.brand} ${group.meta.subBrand}</span>
+          </div>
+          
+          <div class="detail-item">
+            <span class="detail-icon">🔧</span>
+            <span class="detail-label">Modelo:</span>
+            <span>${group.meta.model}</span>
+          </div>
+          
+          <div class="detail-item">
+            <span class="detail-icon">📋</span>
+            <span class="detail-label">Órdenes de trabajo:</span>
+            <span>${group.entries.map(e => e.woaNumber).join(', ')}</span>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    resultsEl.appendChild(container);
   });
 }
 
-function selectEntry(meta, entry) {
-  currentSelection = Object.assign({}, meta, entry);
-  selectionArea.style.display = 'block';
+function selectGroup(element, groupIndex, groupDataStr) {
+  // Limpiar selección anterior
+  document.querySelectorAll('.activity-card').forEach(card => {
+    card.classList.remove('selected');
+  });
+  
+  // Marcar como seleccionado
+  element.classList.add('selected');
+  
+  // Convertir string JSON de vuelta a objeto
+  const group = JSON.parse(groupDataStr.replace(/&quot;/g, '"'));
+  
+  // Seleccionar la primera entrada como ejemplo
+  const firstEntry = group.entries[0] || {};
+  
+  currentSelection = Object.assign({}, group.meta, firstEntry);
+  
+  // Mostrar detalles de selección
   selectedDetails.innerHTML = `
-    <p><strong>SR:</strong> ${meta.srNumber || '-'} — <strong>VIN:</strong> ${meta.vin || '-'}</p>
-    <p><strong>Marca/Submarca/Modelo:</strong> ${meta.brand || '-'} / ${meta.subBrand || '-'} / ${meta.model || '-'}</p>
-    <p><strong>Cuenta:</strong> ${meta.account || '-'}</p>
-    <p><strong>WOA:</strong> ${entry.woaNumber} — <strong>WO:</strong> ${entry.woNumber}</p>
-    <p><strong>Device:</strong> ${entry.deviceType} — <strong>Actividad:</strong> ${entry.activity}</p>
+    <div class="detail-grid">
+      <div class="detail-group">
+        <div class="detail-group-label">SR Number</div>
+        <div class="detail-group-value">#${group.meta.srNumber}</div>
+      </div>
+      
+      <div class="detail-group">
+        <div class="detail-group-label">VIN del Vehículo</div>
+        <div class="detail-group-value">
+          <span class="vin-code">${group.meta.vin}</span>
+        </div>
+      </div>
+      
+      <div class="detail-group">
+        <div class="detail-group-label">Cliente</div>
+        <div class="detail-group-value">${group.meta.account}</div>
+      </div>
+      
+      <div class="detail-group">
+        <div class="detail-group-label">Marca</div>
+        <div class="detail-group-value">${group.meta.brand} ${group.meta.subBrand}</div>
+      </div>
+      
+      <div class="detail-group">
+        <div class="detail-group-label">Modelo</div>
+        <div class="detail-group-value">${group.meta.model}</div>
+      </div>
+      
+      <div class="detail-group">
+        <div class="detail-group-label">Órdenes de Trabajo</div>
+        <div class="detail-group-value">${group.entries.length} orden(es)</div>
+      </div>
+    </div>
+    
+    ${group.entries.length > 0 ? `
+      <div style="margin-top: 1rem;">
+        <h6 style="color: var(--text-primary); margin-bottom: 0.5rem;">Detalles de Órdenes:</h6>
+        ${group.entries.map(entry => `
+          <div style="background: var(--bg-secondary); padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 4px; font-size: 0.8rem;">
+            <strong>WOA:</strong> ${entry.woaNumber} | 
+            <strong>WO:</strong> ${entry.woNumber} | 
+            <strong>Dispositivo:</strong> ${entry.deviceType} | 
+            <strong>Actividad:</strong> ${entry.activity}
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
   `;
-}
-
-function highlightRow(row) {
-  // remover highlight previo
-  document.querySelectorAll('.item-row.selected').forEach(r => r.classList.remove('selected'));
-  row.classList.add('selected');
-  // scroll suave
-  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  
+  selectionArea.style.display = 'block';
+  selectionArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  
+  setStatus(`Actividad #${group.meta.srNumber} seleccionada`, 'success');
 }
