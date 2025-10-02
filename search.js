@@ -208,26 +208,33 @@ function doSearch() {
 
 function renderGroups(grouped) {
   resultsEl.innerHTML = '';
+  // ensure results are inside a scrollable wrapper
+  let wrapper = document.querySelector('.results-scroll');
+  if (!wrapper) {
+    wrapper = document.createElement('div');
+    wrapper.className = 'results-scroll';
+    resultsEl.appendChild(wrapper);
+  } else {
+    wrapper.innerHTML = '';
+  }
+
   Object.values(grouped).forEach((group, index) => {
     const container = document.createElement('div');
     container.className = 'contenedor-actividad';
     container.setAttribute('data-activity-id', group.meta.srNumber);
     
     container.innerHTML = `
+      <div class="corner-dot" title="estado"></div>
       <div class="activity-card" onclick="selectGroup(this, ${index}, ${JSON.stringify(group).replace(/"/g, '&quot;')})">
         <div class="activity-header">
-          <div class="activity-number">#${group.meta.srNumber}</div>
+          <div class="activity-number">${group.entries && group.entries[0] && group.entries[0].woNumber ? group.entries[0].woNumber : group.meta.srNumber} <span class="header-vin"> - ${group.meta.vin}</span></div>
           <div class="activity-status complete">
             ${group.entries.length} orden${group.entries.length !== 1 ? 'es' : ''}
           </div>
         </div>
         
         <div class="activity-details">
-          <div class="detail-item">
-            <span class="detail-icon">🚗</span>
-            <span class="detail-label">VIN:</span>
-            <span class="vin-code">${group.meta.vin}</span>
-          </div>
+
           
           <div class="detail-item">
             <span class="detail-icon">🏢</span>
@@ -236,37 +243,48 @@ function renderGroups(grouped) {
           </div>
           
           <div class="detail-item">
-            <span class="detail-icon">🚙</span>
-            <span class="detail-label">Marca:</span>
-            <span>${group.meta.brand} ${group.meta.subBrand}</span>
-          </div>
-          
-          <div class="detail-item">
-            <span class="detail-icon">🔧</span>
-            <span class="detail-label">Modelo:</span>
-            <span>${group.meta.model}</span>
+            <div class="mini-cards">
+              <div class="mini-card card l-bg-blue-dark">
+                <span class="icon">🚗</span>
+                <div>
+                  <div class="label">Marca</div>
+                  <div class="value">${group.meta.brand} ${group.meta.subBrand}</div>
+                </div>
+              </div>
+
+              <div class="mini-card card l-bg-green">
+                <span class="icon">📅</span>
+                <div>
+                  <div class="label">Modelo</div>
+                  <div class="value">${group.meta.model}</div>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div class="detail-item">
             <span class="detail-icon">📋</span>
-            <span class="detail-label">Órdenes de trabajo:</span>
+            <span class="detail-label">Actividades:</span>
             <span>${group.entries.map(e => e.woaNumber).join(', ')}</span>
           </div>
         </div>
       </div>
     `;
     
-    resultsEl.appendChild(container);
+    wrapper.appendChild(container);
   });
 }
 
 function selectGroup(element, groupIndex, groupDataStr) {
-  // Limpiar selección anterior
-  document.querySelectorAll('.activity-card').forEach(card => {
-    card.classList.remove('selected');
+  // Limpiar selección anterior en contenedores
+  document.querySelectorAll('.contenedor-actividad').forEach(c => {
+    c.classList.remove('selected');
+    const card = c.querySelector('.activity-card'); if (card) card.classList.remove('selected');
   });
-  
-  // Marcar como seleccionado
+
+  // Marcar como seleccionado (tanto contenedor como card interno)
+  const container = element.closest('.contenedor-actividad');
+  if (container) container.classList.add('selected');
   element.classList.add('selected');
   
   // Convertir string JSON de vuelta a objeto
@@ -331,5 +349,5 @@ function selectGroup(element, groupIndex, groupDataStr) {
   selectionArea.style.display = 'block';
   selectionArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   
-  setStatus(`Actividad #${group.meta.srNumber} seleccionada`, 'success');
+  setStatus(`Actividad ${firstEntry.woNumber ? '#'+firstEntry.woNumber : '#'+group.meta.srNumber} seleccionada`, 'success');
 }
