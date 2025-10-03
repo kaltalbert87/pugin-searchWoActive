@@ -1,346 +1,605 @@
-// search.js - lógica para buscar actividades por VIN
+// search.js - encapsulado como plugin similar a fieldservice.js
 "use strict";
 
-const searchBtn = document.getElementById('searchBtn');
-const vinInput = document.getElementById('vinInput');
-const resultsEl = document.getElementById('results');
-const statusArea = document.getElementById('statusArea');
-const selectionArea = document.getElementById('selectionArea');
-const selectedDetails = document.getElementById('selectedDetails');
-const confirmBtn = document.getElementById('confirmBtn');
-const clearSelection = document.getElementById('clearSelection');
-const resultsHeader = document.getElementById('resultsHeader');
-const resultsSummary = document.getElementById('resultsSummary');
-const noResults = document.getElementById('noResults');
-const loading = document.getElementById('loading');
-const error = document.getElementById('error');
-const mainContent = document.getElementById('main-content');
+let urln8n;
+let Autorizacion;
 
-let lastResults = [];
-let currentSelection = null;
+class SearchPlugin {
+  constructor() {
+    this.lastResults = [];
+    this.currentSelection = null;
+    this.elements = {};
+    // Determine if running embedded in a host or local
+    this.isLocal = !document.location.ancestorOrigins || document.location.ancestorOrigins.length === 0;
 
-searchBtn.addEventListener('click', doSearch);
-vinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
-clearSelection.addEventListener('click', () => {
-  currentSelection = null;
-  selectionArea.style.display = 'none';
-  document.querySelectorAll('.activity-card.selected').forEach(card => {
-    card.classList.remove('selected');
-  });
-});
+    // Inicializar cuando se cargue el DOM
+    document.addEventListener('DOMContentLoaded', () => this.init());
+  }
 
-confirmBtn.addEventListener('click', () => {
-  if (!currentSelection) return setStatus('No hay selección activa', 'warning');
+  /**
+   * openMessage: process an 'open' payload from the host (Field Service)
+   * Mirrors important behavior from FieldServicePlugin.openMessage:
+   * - Do nothing in local mode
+   * - Extract activity payload and common fields (vin, XA_LIST, photo fields)
+   * - Prefill VIN input and trigger a search when appropriate
+   */
+  openMessage(data) {
+    // Do not run openMessage in local mode
+    if (this.isLocal) {
+      console.log('openMessage bloqueado - modo local activo');
+      return;
+    }
 
-  // Guardar en sessionStorage para compatibilidad con plugin
-  sessionStorage.setItem('selectedActivity', JSON.stringify({
-    srNumber: currentSelection.srNumber,
-    vin: currentSelection.vin,
-    brand: currentSelection.brand,
-    subBrand: currentSelection.subBrand,
-    model: currentSelection.model,
-    account: currentSelection.account,
-    woaNumber: currentSelection.woaNumber,
-    woNumber: currentSelection.woNumber,
-    deviceType: currentSelection.deviceType,
-    activity: currentSelection.activity
-  }));
+    //const activity = data.activity || data.activityData || data.payload || null;
 
-  console.log('Registro confirmado:', currentSelection);
-  setStatus('Registro confirmado: ' + (currentSelection.woaNumber || currentSelection.srNumber), 'success');
+    urln8n = data.securedData.n8nUrl;
+    Autorizacion = data.securedData.Authorization;
 
-  // Intentar integración con plugin si está disponible
-  if (typeof window.openMessage === 'function') {
+    console.log('openMessage recibido:', data);
+
+
+    // Map common fields to global variables that other parts of the app (or FieldService flow) may expect
     try {
-      window.openMessage(currentSelection);
-    } catch (error) {
-      console.log('Plugin no disponible, datos guardados en sessionStorage');
+
+      // VIN and account
+      //window.vin = activity.xa_car_vin || activity.vin || activity.Vin_c || window.vin || '';
+      //window.accountName = activity.xa_wo_cuenta || activity.account || window.accountName || '';
+
+      console.log('OpenMessage');
+
+    } catch (e) {
+      console.error('Error proccesando openMessage payload:', e);
+    }
+
+  }
+
+  init() {
+    // Referencias al DOM
+    this.elements.searchBtn = document.getElementById('searchBtn');
+    this.elements.vinInput = document.getElementById('vinInput');
+    this.elements.resultsEl = document.getElementById('results');
+    this.elements.statusArea = document.getElementById('statusArea');
+    this.elements.selectionArea = document.getElementById('selectionArea');
+    this.elements.selectedDetails = document.getElementById('selectedDetails');
+    this.elements.confirmBtn = document.getElementById('confirmBtn');
+    this.elements.clearSelection = document.getElementById('clearSelection');
+    this.elements.resultsHeader = document.getElementById('resultsHeader');
+    this.elements.resultsSummary = document.getElementById('resultsSummary');
+    this.elements.noResults = document.getElementById('noResults');
+    this.elements.loading = document.getElementById('loading');
+    this.elements.error = document.getElementById('error');
+    this.elements.mainContent = document.getElementById('main-content');
+
+    // Bind events
+    if (this.elements.searchBtn) this.elements.searchBtn.addEventListener('click', () => this.doSearch());
+    if (this.elements.vinInput) this.elements.vinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doSearch(); });
+    if (this.elements.clearSelection) this.elements.clearSelection.addEventListener('click', () => this.clearSelection());
+    if (this.elements.confirmBtn) this.elements.confirmBtn.addEventListener('click', () => this.confirmSelection());
+
+  // Listen for messages from host using a dedicated handler (mirrors fieldservice.js)
+  window.addEventListener('message', this.getWebMessage.bind(this), false);
+
+    // Initial UI
+    console.log('🚗 Search Plugin iniciado');
+    if (this.elements.vinInput) this.elements.vinInput.focus();
+    this.setStatus('¡Bienvenido! Ingrese una fracción de VIN para buscar actividades', 'info');
+
+    // Handshake ready
+    try {
+      this.sendWebMessage({ apiVersion: 1, method: 'ready' });
+      console.log('Ready message sent to host');
+    } catch (e) {
+      console.warn('No host detected for ready handshake');
     }
   }
-});
 
-// Inicialización
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('🚗 Field Service Oracle - Sistema iniciado');
-  vinInput.focus();
-  setStatus('¡Bienvenido! Ingrese una fracción de VIN para buscar actividades', 'info');
-});
+  // status helper
+  setStatus(msg, type = 'info') {
+    const icons = { 'success':'✅','warning':'⚠️','danger':'❌','info':'ℹ️' };
+    const colors = { 'success':'#155724','warning':'#856404','danger':'#721c24','info':'#0c5460' };
+    const backgrounds = {
+      'success':'linear-gradient(135deg, #d4edda, #c3e6cb)',
+      'warning':'linear-gradient(135deg, #fff3cd, #fce589)',
+      'danger':'linear-gradient(135deg, #f8d7da, #f1b0b7)',
+      'info':'linear-gradient(135deg, #d1ecf1, #bee5eb)'
+    };
 
-function setStatus(msg, type = 'info') {
-  const icons = {
-    'success': '✅',
-    'warning': '⚠️',
-    'danger': '❌',
-    'info': 'ℹ️'
-  };
+    if (!this.elements.statusArea) return;
+    this.elements.statusArea.innerHTML = `\n      <div class="notification ${type}" style="\n        background: ${backgrounds[type] || backgrounds.info};\n        color: ${colors[type] || colors.info};\n        padding: var(--spacing-md);\n        border-radius: var(--radius-md);\n        margin-bottom: var(--spacing-md);\n        font-weight: 500;\n        display: flex;\n        align-items: center;\n        gap: var(--spacing-sm);\n      ">\n        <span>${icons[type] || icons.info}</span>\n        <span>${msg}</span>\n      </div>\n    `;
+  }
 
-  const colors = {
-    'success': '#155724',
-    'warning': '#856404',
-    'danger': '#721c24',
-    'info': '#0c5460'
-  };
+  // messaging helpers
+  isJson(str) { if (typeof str !== 'string') return false; try { JSON.parse(str); return true; } catch(e) { return false; } }
 
-  const backgrounds = {
-    'success': 'linear-gradient(135deg, #d4edda, #c3e6cb)',
-    'warning': 'linear-gradient(135deg, #fff3cd, #fce589)',
-    'danger': 'linear-gradient(135deg, #f8d7da, #f1b0b7)',
-    'info': 'linear-gradient(135deg, #d1ecf1, #bee5eb)'
-  };
-
-  statusArea.innerHTML = `
-    <div class="notification ${type}" style="
-      background: ${backgrounds[type] || backgrounds.info};
-      color: ${colors[type] || colors.info};
-      padding: var(--spacing-md);
-      border-radius: var(--radius-md);
-      margin-bottom: var(--spacing-md);
-      font-weight: 500;
-      display: flex;
-      align-items: center;
-      gap: var(--spacing-sm);
-    ">
-      <span>${icons[type] || icons.info}</span>
-      <span>${msg}</span>
-    </div>
-  `;
-}
-
-function doSearch() {
-  const vin = (vinInput.value || '').trim();
-  if (!vin) return setStatus('Ingresa al menos una fracción de VIN', 'warning');
-
-  setStatus('Buscando actividades...', 'info');
-  resultsEl.innerHTML = '';
-  selectionArea.style.display = 'none';
-  loading.style.display = 'block';
-  error.style.display = 'none';
-  mainContent.style.display = 'none';
-  currentSelection = null;
-
-  const base = 'https://dev-api-sie.encontrack.com/webhook/crm/searchWoByVin';
-  const uri = `${base}?vin=${encodeURIComponent(vin)}`;
-
-  const xhttp = new XMLHttpRequest();
-  xhttp.open('GET', uri, true);
-  xhttp.setRequestHeader('Content-Type', 'application/json');
-
-  // Authorization: prefer input, fallback to sessionStorage Autorizacion
-  const auth = "Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=";
-  if (auth) xhttp.setRequestHeader('Authorization', auth);
-
-  xhttp.onreadystatechange = function () {
-    if (this.readyState !== 4) return;
-
-    loading.style.display = 'none';
-
-    if (this.status >= 200 && this.status < 300) {
-      let data;
-      try { data = JSON.parse(this.responseText); }
-      catch (e) {
-        setStatus('Respuesta inválida del servidor', 'danger');
-        console.error(e);
-        return;
+  sendWebMessage(data) {
+    const payload = typeof data === 'string' ? data : JSON.stringify(data);
+    try {
+      if (window.parent && window.parent !== window && typeof window.parent.postMessage === 'function') {
+        window.parent.postMessage(payload, '*');
+        console.log('Mensaje enviado al host:', payload);
+        return true;
+      } else {
+        console.log('No se detectó host (parent). Mensaje preparado:', payload);
+        return false;
       }
+    } catch (err) { console.error('Error enviando mensaje al host:', err); return false; }
+  }
 
-      lastResults = Array.isArray(data) ? data : [];
-      if (lastResults.length === 0) {
-        mainContent.style.display = 'block';
-        noResults.style.display = 'block';
-        setStatus('No se encontraron resultados', 'warning');
-        return;
+  handleMessage(event) {
+    let data = event.data;
+    if (typeof data === 'string' && this.isJson(data)) {
+      try { data = JSON.parse(data); } catch(e) { return; }
+    }
+
+    if (!data || !data.method) return;
+    console.log('Mensaje recibido del host:', data);
+
+    if (data.method === 'ready') {
+      this.setStatus('Host ready: comunicación establecida', 'info');
+      return;
+    }
+
+    if (data.method === 'open' || data.method === 'openMessage') {
+      // Delegate to a dedicated openMessage handler (mirrors FieldServicePlugin.openMessage)
+      try {
+        this.openMessage(data);
+      } catch (e) {
+        console.error('Error ejecutando openMessage:', e);
       }
+      return;
+    }
 
-      // Agrupar por srNumber, vin, brand, subBrand, model
-      const grouped = {};
-      lastResults.forEach(item => {
-        const key = `${item.srNumber || '-'}|${item.vin || '-'}|${item.brand || '-'}|${item.subBrand || '-'}|${item.model || '-'}`;
-        if (!grouped[key]) {
-          grouped[key] = {
-            meta: {
-              srNumber: item.srNumber || '-',
-              vin: item.vin || '-',
-              brand: item.brand || '-',
-              subBrand: item.subBrand || '-',
-              model: item.model || '-',
-              account: item.account || '-'
-            },
-            entries: []
-          };
+    if (data.method === 'init') {
+      // simple init acknowledgement
+      this.setStatus('Init recibido desde host', 'info');
+      return;
+    }
+  }
+
+  /**
+   * getWebMessage: entry point for raw postMessage events
+   * Mirrors fieldservice.js: validates JSON, respects local mode and delegates to handleMessage
+   */
+  getWebMessage(event) {
+    console.log('getWebMessage raw event:', event.data);
+
+    // If running local, ignore unrelated messages (allow close/update)
+    if (this.isLocal && (!event.data || (typeof event.data === 'string' && !event.data.includes('close') && !event.data.includes('update')))) {
+      console.log('Mensaje ignorado - modo local activo');
+      return false;
+    }
+
+    if (typeof event.data === 'undefined') return false;
+    if (typeof event.data === 'string' && !this.isJson(event.data)) return false;
+
+    // Delegate to handleMessage which already supports parsed objects
+    try {
+      this.handleMessage(event);
+    } catch (e) {
+      console.error('Error procesando mensaje en handleMessage:', e);
+    }
+
+    return true;
+  }
+
+  // selection helpers
+  clearSelection() {
+    this.currentSelection = null;
+    if (this.elements.selectionArea) this.elements.selectionArea.style.display = 'none';
+    // Restore results list visibility so user can pick another
+    if (this.elements.resultsEl) this.elements.resultsEl.style.display = '';
+    if (this.elements.resultsHeader) this.elements.resultsHeader.style.display = '';
+
+    // Remove selection highlight
+    document.querySelectorAll('.activity-card.selected').forEach(card => card.classList.remove('selected'));
+
+    // Remove delegated entry click handler if present to avoid duplicates
+    if (this._entriesDelegatedHandler && this.elements.selectedDetails) {
+      try { this.elements.selectedDetails.removeEventListener('click', this._entriesDelegatedHandler); } catch (e) { /* ignore */ }
+      this._entriesDelegatedHandler = null;
+    }
+  }
+
+  confirmSelection() {
+    if (!this.currentSelection) return this.setStatus('No hay selección activa', 'warning');
+
+    sessionStorage.setItem('selectedActivity', JSON.stringify(this.currentSelection));
+    console.log('Registro confirmado:', this.currentSelection);
+    this.setStatus('Registro confirmado: ' + (this.currentSelection.woaNumber || this.currentSelection.srNumber), 'success');
+
+    // Attach selected resource if present
+    if (this.selectedResource) {
+      this.currentSelection.assignedResource = this.selectedResource;
+    }
+
+    const messageData = { apiVersion: 1, method: 'close', activity: this.currentSelection };
+    const sent = this.sendWebMessage(messageData);
+    if (!sent) {
+      if (typeof window.openMessage === 'function') {
+        try { window.openMessage(this.currentSelection); } catch(e) { console.warn('Fallback openMessage failed', e); }
+      } else {
+        console.log('No host detected; activity saved to sessionStorage only.');
+      }
+    }
+  }
+
+  /**
+   * Render a selector UI with available resources and handle selection
+   */
+  renderResourceSelector() {
+    if (!this.elements.selectedDetails) return;
+
+    // Create container for resource selector
+    let container = document.getElementById('resource-selector');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'resource-selector';
+      container.style.marginTop = '1rem';
+      container.innerHTML = `
+        <label for="resourceSelect">Asignar a técnico:</label>
+        <div style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem;">
+          <select id="resourceSelect" style="flex:1; padding:0.4rem; border-radius:6px; border:1px solid #ccc"></select>
+          <button id="assignResourceBtn" class="btn small">Asignar</button>
+        </div>
+        <div id="resourceNote" style="margin-top:0.5rem; font-size:0.85rem; color:var(--text-muted);"></div>
+      `;
+      this.elements.selectedDetails.appendChild(container);
+
+      document.getElementById('assignResourceBtn').addEventListener('click', () => this.assignResource());
+    }
+
+    const select = document.getElementById('resourceSelect');
+    select.innerHTML = '';
+    // Add a default empty option
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = '-- Selecciona un técnico --';
+    select.appendChild(emptyOpt);
+
+    this.resources.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.resourceId || r.resourceId;
+      opt.textContent = `${r.name} (${r.resourceId})`;
+      opt.dataset.email = r.email || '';
+      opt.dataset.phone = r.phone || '';
+      select.appendChild(opt);
+    });
+
+    // Preselect if previously assigned
+    if (this.selectedResource && this.selectedResource.resourceId) {
+      select.value = this.selectedResource.resourceId;
+      const note = document.getElementById('resourceNote');
+      if (note) note.textContent = `Asignado: ${this.selectedResource.name} (${this.selectedResource.resourceId})`;
+    }
+  }
+
+  /**
+   * Assign the selected resource from the selector to `this.selectedResource`
+   */
+  assignResource() {
+    const select = document.getElementById('resourceSelect');
+    if (!select) return this.setStatus('Selector de recursos no disponible', 'warning');
+    const val = select.value;
+    if (!val) return this.setStatus('Selecciona un técnico antes de asignar', 'warning');
+
+    const opt = select.options[select.selectedIndex];
+    const assigned = {
+      resourceId: opt.value,
+      name: opt.textContent,
+      email: opt.dataset.email,
+      phone: opt.dataset.phone
+    };
+
+    this.selectedResource = assigned;
+    const note = document.getElementById('resourceNote');
+    if (note) note.textContent = `Asignado: ${assigned.name} (${assigned.resourceId})`;
+    this.setStatus(`Técnico asignado: ${assigned.name}`, 'success');
+  }
+
+  // main search flow
+  doSearch() {
+    const vin = (this.elements.vinInput?.value || '').trim();
+    if (!vin) return this.setStatus('Ingresa al menos una fracción de VIN', 'warning');
+
+    this.setStatus('Buscando actividades...', 'info');
+    this.elements.resultsEl.innerHTML = '';
+    if (this.elements.selectionArea) this.elements.selectionArea.style.display = 'none';
+    if (this.elements.loading) this.elements.loading.style.display = 'block';
+    if (this.elements.error) this.elements.error.style.display = 'none';
+    if (this.elements.mainContent) this.elements.mainContent.style.display = 'none';
+    this.currentSelection = null;
+
+    const base = 'https://dev-api-sie.encontrack.com/webhook/crm/searchWoByVin';
+    const uri = `${base}?vin=${encodeURIComponent(vin)}`;
+
+    const xhttp = new XMLHttpRequest();
+    xhttp.open('GET', uri, true);
+    xhttp.setRequestHeader('Content-Type', 'application/json');
+
+    const auth = "Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=";
+    if (auth) xhttp.setRequestHeader('Authorization', auth);
+
+    xhttp.onreadystatechange = () => {
+      if (xhttp.readyState !== 4) return;
+      if (this.elements.loading) this.elements.loading.style.display = 'none';
+
+      if (xhttp.status >= 200 && xhttp.status < 300) {
+        let data;
+        try { data = JSON.parse(xhttp.responseText); } catch (e) { this.setStatus('Respuesta inválida del servidor', 'danger'); console.error(e); return; }
+
+        this.lastResults = Array.isArray(data) ? data : [];
+        if (this.lastResults.length === 0) {
+          if (this.elements.mainContent) this.elements.mainContent.style.display = 'block';
+          if (this.elements.noResults) this.elements.noResults.style.display = 'block';
+          this.setStatus('No se encontraron resultados', 'warning');
+          return;
         }
-        grouped[key].entries.push({
-          woaNumber: item.woaNumber || '-',
-          deviceType: item.deviceType || '-',
-          activity: item.activity || '-',
-          woNumber: item.woNumber || '-'
+
+        // Agrupar
+        const grouped = {};
+        this.lastResults.forEach(item => {
+          const key = `${item.srNumber || '-'}|${item.vin || '-'}|${item.brand || '-'}|${item.subBrand || '-'}|${item.model || '-'}`;
+          if (!grouped[key]) grouped[key] = { meta: { srNumber: item.srNumber||'-', vin: item.vin||'-', brand: item.brand||'-', subBrand: item.subBrand||'-', model: item.model||'-', account: item.account||'-' }, entries: [] };
+          grouped[key].entries.push({ woaNumber: item.woaNumber||'-', deviceType: item.deviceType||'-', activity: item.activity||'-', woNumber: item.woNumber||'-' });
         });
+
+        this.renderGroups(grouped);
+
+        if (this.elements.mainContent) this.elements.mainContent.style.display = 'block';
+        if (this.elements.noResults) this.elements.noResults.style.display = 'none';
+        if (this.elements.resultsHeader) this.elements.resultsHeader.style.display = 'flex';
+        this.setStatus(this.lastResults.length + ' registros encontrados', 'success');
+
+        // Preload resources so they are ready when the user selects a record
+        if (!this.resources || !Array.isArray(this.resources) || this.resources.length === 0) {
+          console.log('Recursos no cargados aún: iniciando fetchResources() de forma automática');
+          this.fetchResources();
+        }
+
+      } else {
+        this.setStatus('Error en la petición: ' + xhttp.status, 'danger');
+        console.error('Error', xhttp.status, xhttp.responseText);
+      }
+    };
+
+    xhttp.onerror = () => { if (this.elements.loading) this.elements.loading.style.display = 'none'; this.setStatus('Error de red al realizar la búsqueda', 'danger'); };
+    xhttp.ontimeout = () => { if (this.elements.loading) this.elements.loading.style.display = 'none'; this.setStatus('Tiempo de espera agotado. Intenta nuevamente.', 'warning'); };
+    xhttp.timeout = 30000;
+    xhttp.send();
+  }
+
+  // fetch resources flow (same structure as doSearch)
+  fetchResources() {
+    // Prevent concurrent fetches
+    if (this._fetchingResources) {
+      console.log('fetchResources: ya se está obteniendo la lista de recursos');
+      return;
+    }
+    this._fetchingResources = true;
+
+    // Do not clear the activities/results UI while loading resources.
+    // Show a small loader appended after the results (end of cards) so we don't overwrite main status.
+    let resourcesStatus = document.getElementById('resources-status');
+    if (!resourcesStatus) {
+      resourcesStatus = document.createElement('div');
+      resourcesStatus.id = 'resources-status';
+      resourcesStatus.style.marginTop = '0.5rem';
+      resourcesStatus.style.fontSize = '0.9rem';
+      resourcesStatus.style.color = 'var(--text-muted)';
+      if (this.elements.resultsEl) this.elements.resultsEl.appendChild(resourcesStatus);
+      else document.body.appendChild(resourcesStatus);
+    }
+    resourcesStatus.textContent = 'Buscando recursos...';
+
+    const base = 'https://dev-api-sie.encontrack.com/webhook/fsm/resources';
+    const uri = base;
+
+    const xhttp = new XMLHttpRequest();
+    xhttp.open('GET', uri, true);
+    xhttp.setRequestHeader('Content-Type', 'application/json');
+
+    // Prefer Authorization provided via openMessage (Autorizacion), otherwise fallback to the same Basic used elsewhere
+    const authHeader = (typeof Autorizacion !== 'undefined' && Autorizacion) ? Autorizacion : "Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=";
+    if (authHeader) xhttp.setRequestHeader('Authorization', authHeader);
+
+    xhttp.onreadystatechange = () => {
+      if (xhttp.readyState !== 4) return;
+      // done
+      this._fetchingResources = false;
+      if (resourcesStatus) resourcesStatus.textContent = '';
+
+      if (xhttp.status >= 200 && xhttp.status < 300) {
+        let data;
+        try { data = JSON.parse(xhttp.responseText); } catch (e) { console.error('Respuesta inválida del servidor (resources)', e); if (resourcesStatus) resourcesStatus.textContent = 'Error: respuesta inválida al obtener recursos'; return; }
+
+        // Expecting an array
+        const parsed = Array.isArray(data) ? data : [];
+        console.log('Recursos raw recibidos (count):', parsed.length);
+
+        // Dedupe by resourceId to avoid duplicates
+        const map = new Map();
+        parsed.forEach(r => {
+          const id = r.resourceId || r.resourceId || r.id || r.resourceId;
+          if (id && !map.has(id)) map.set(id, r);
+        });
+        this.resources = Array.from(map.values());
+        console.log('Recursos dedupeados (count):', this.resources.length);
+
+        if (this.resources.length === 0) {
+          if (resourcesStatus) resourcesStatus.textContent = 'No se encontraron técnicos';
+        } else {
+          if (resourcesStatus) resourcesStatus.textContent = `${this.resources.length} técnicos cargados`;
+        }
+
+        // If a selection is active, render the resource selector so the user can assign immediately
+        if (this.currentSelection) {
+          this.renderResourceSelector();
+        }
+
+      } else {
+        console.error('Error resources', xhttp.status, xhttp.responseText);
+        if (resourcesStatus) resourcesStatus.textContent = 'Error al obtener técnicos';
+      }
+    };
+
+    xhttp.onerror = () => {
+      this._fetchingResources = false;
+      if (resourcesStatus) resourcesStatus.textContent = 'Error de red al obtener técnicos';
+    };
+
+    xhttp.ontimeout = () => {
+      this._fetchingResources = false;
+      if (resourcesStatus) resourcesStatus.textContent = 'Tiempo de espera agotado al obtener técnicos';
+    };
+
+    xhttp.timeout = 30000;
+    xhttp.send();
+  }
+
+  renderGroups(grouped) {
+    if (!this.elements.resultsEl) return;
+    this.elements.resultsEl.innerHTML = '';
+    let wrapper = document.querySelector('.results-scroll');
+    if (!wrapper) { wrapper = document.createElement('div'); wrapper.className = 'results-scroll'; this.elements.resultsEl.appendChild(wrapper); }
+    else wrapper.innerHTML = '';
+
+    Object.values(grouped).forEach((group, index) => {
+      const container = document.createElement('div');
+      container.className = 'contenedor-actividad';
+      container.setAttribute('data-activity-id', group.meta.srNumber);
+
+      container.innerHTML = `\n        <div class="corner-dot" title="estado"></div>\n        <div class="activity-card" onclick="selectGroup(this, ${index}, ${JSON.stringify(group).replace(/\"/g, '&quot;')})">\n          <div class="activity-header">\n            <div class="activity-number">${group.entries && group.entries[0] && group.entries[0].woNumber ? group.entries[0].woNumber : group.meta.srNumber} <span class="header-vin"> - ${group.meta.vin}</span></div>\n\n          </div>\n          \n          <div class="activity-details">\n            <div class="detail-item">\n              <div class="mini-cards">\n                <div class="mini-card card l-bg-cyan client">\n                  <span class="icon">🏢</span>\n                  <div>\n                    <div class="label">Cliente</div>\n                    <div class="value">${group.meta.account}</div>\n                  </div>\n                </div>\n\n                <div class="mini-card card l-bg-blue-dark">\n                  <span class="icon">🚗</span>\n                  <div>\n                    <div class="label">Marca</div>\n                    <div class="value">${group.meta.brand} ${group.meta.subBrand}</div>\n                  </div>\n                </div>\n\n                <div class="mini-card card l-bg-green">\n                  <span class="icon">📅</span>\n                  <div>\n                    <div class="label">Modelo</div>\n                    <div class="value">${group.meta.model}</div>\n                  </div>\n                </div>\n              </div>\n            </div>\n            \n            <div class="detail-item">\n              <span class="detail-icon">📋</span>\n              <span class="detail-label">Actividades:</span>\n              <span>${group.entries.map(e => (e.activity || '-') + ' (' + (e.deviceType || '-') + ')').join(', ')}</span>\n            </div>\n          </div>\n        </div>\n      `;
+
+      wrapper.appendChild(container);
+    });
+  }
+
+  selectGroup(element, groupIndex, groupDataStr) {
+    // Reset selection visuals
+    document.querySelectorAll('.contenedor-actividad').forEach(c => { c.classList.remove('selected'); const card = c.querySelector('.activity-card'); if (card) card.classList.remove('selected'); });
+    const container = element.closest('.contenedor-actividad'); if (container) container.classList.add('selected'); element.classList.add('selected');
+
+    // Parse and store the whole group so we can pick individual entries
+    let group;
+    try {
+      if (typeof groupDataStr === 'string') {
+        group = JSON.parse(groupDataStr.replace(/&quot;/g, '"'));
+      } else if (typeof groupDataStr === 'object' && groupDataStr !== null) {
+        // sometimes the inline onclick passes a real object instead of a string
+        group = groupDataStr;
+      } else {
+        // fallback: attempt JSON.parse on the string conversion
+        group = JSON.parse(String(groupDataStr));
+      }
+    } catch (e) {
+      console.warn('selectGroup: failed to parse groupDataStr, attempting to use as-is', e, groupDataStr);
+      group = groupDataStr;
+    }
+    console.log('selectGroup: group type:', typeof groupDataStr, 'parsed group entries:', (group && group.entries ? group.entries.length : 0));
+    this.currentGroup = group;
+    // Default selection is the first entry
+    const firstEntry = group.entries[0] || {};
+    this.currentSelection = Object.assign({}, group.meta, firstEntry);
+
+    if (!this.elements.selectedDetails) return;
+
+    // Header meta
+    let html = `\n      <div class="detail-grid">\n        <div class="detail-group">\n          <div class="detail-group-label">SR Number</div>\n          <div class="detail-group-value">#${group.meta.srNumber}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">VIN del Vehículo</div>\n          <div class="detail-group-value">\n            <span class="vin-code">${group.meta.vin}</span>\n          </div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Cliente</div>\n          <div class="detail-group-value">${group.meta.account}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Marca</div>\n          <div class="detail-group-value">${group.meta.brand} ${group.meta.subBrand}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Modelo</div>\n          <div class="detail-group-value">${group.meta.model}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Órdenes de Trabajo</div>\n          <div class="detail-group-value">${group.entries.length} orden(es)</div>\n        </div>\n      </div>\n    `;
+
+    // Entries list - make each entry clickable so user can pick a specific WO
+    if (group.entries.length > 0) {
+      html += `\n        <div style="margin-top: 1rem;">\n          <h6 style="color: var(--text-primary); margin-bottom: 0.5rem;">Detalles de Órdenes:</h6>\n          <div id="entries-list" class="entries-list">`;
+
+      group.entries.forEach((entry, idx) => {
+        html += `\n            <div class="entry-item" data-entry-index="${idx}" style="background: var(--bg-secondary); padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 4px; font-size: 0.9rem; cursor:pointer;">\n              <strong>WO:</strong> ${entry.woNumber} &nbsp;|&nbsp; <strong>Actividad:</strong> ${(entry.activity || '-') + ' (' + (entry.deviceType || '-') + ')'}\n            </div>`;
       });
 
-      renderGroups(grouped);
-
-      mainContent.style.display = 'block';
-      noResults.style.display = 'none';
-      resultsHeader.style.display = 'flex';
-      setStatus(lastResults.length + ' registros encontrados', 'success');
-
-    } else {
-      setStatus('Error en la petición: ' + this.status, 'danger');
-      console.error('Error', this.status, this.responseText);
+      html += `\n          </div>\n        </div>`;
     }
-  };
 
-  xhttp.onerror = function () {
-    loading.style.display = 'none';
-    setStatus('Error de red al realizar la búsqueda', 'danger');
-  };
+    this.elements.selectedDetails.innerHTML = html;
 
-  xhttp.ontimeout = function () {
-    loading.style.display = 'none';
-    setStatus('Tiempo de espera agotado. Intenta nuevamente.', 'warning');
-  };
+    // Use delegated click handler for entry-items (more robust than per-item listeners)
+    // Remove any previous delegated handler to avoid duplicates
+    if (this._entriesDelegatedHandler) this.elements.selectedDetails.removeEventListener('click', this._entriesDelegatedHandler);
+    this._entriesDelegatedHandler = (ev) => {
+      const el = ev.target.closest && ev.target.closest('.entry-item');
+      if (!el) return;
+      const idx = parseInt(el.getAttribute('data-entry-index'), 10);
+      console.log('entry clicked index=', idx);
+      this.selectEntry(idx);
+    };
+    this.elements.selectedDetails.addEventListener('click', this._entriesDelegatedHandler);
 
-  xhttp.timeout = 30000;
-  xhttp.send();
-}
+    // mark the first entry as selected visually by default
+    const firstItem = this.elements.selectedDetails.querySelector('.entry-item[data-entry-index="0"]');
+    if (firstItem) firstItem.classList.add('selected');
 
-function renderGroups(grouped) {
-  resultsEl.innerHTML = '';
-  // ensure results are inside a scrollable wrapper
-  let wrapper = document.querySelector('.results-scroll');
-  if (!wrapper) {
-    wrapper = document.createElement('div');
-    wrapper.className = 'results-scroll';
-    resultsEl.appendChild(wrapper);
-  } else {
-    wrapper.innerHTML = '';
+  if (this.elements.selectionArea) { this.elements.selectionArea.style.display = 'block'; this.elements.selectionArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  // Hide the main results so the user focuses on the selected activity
+  if (this.elements.resultsEl) this.elements.resultsEl.style.display = 'none';
+  if (this.elements.resultsHeader) this.elements.resultsHeader.style.display = 'none';
+    this.setStatus(`Actividad ${firstEntry.woNumber ? '#' + firstEntry.woNumber : '#' + group.meta.srNumber} seleccionada`, 'success');
+
+    // After selecting a group, ensure resources are available and render selector
+    if (this.resources && Array.isArray(this.resources) && this.resources.length > 0) {
+      this.renderResourceSelector();
+    } else {
+      this.fetchResources();
+    }
+
+    // Add a back button inside selectedDetails so user can return to the list
+    try {
+      const backBtnId = 'selected-back-btn';
+      let backBtn = this.elements.selectedDetails.querySelector('#' + backBtnId);
+      if (!backBtn) {
+        backBtn = document.createElement('button');
+        backBtn.id = backBtnId;
+        backBtn.className = 'btn small';
+        backBtn.style.marginTop = '0.6rem';
+        backBtn.textContent = '← Regresar a resultados';
+        backBtn.addEventListener('click', () => this.clearSelection());
+        this.elements.selectedDetails.insertBefore(backBtn, this.elements.selectedDetails.firstChild);
+      }
+    } catch (e) { console.warn('No se pudo insertar botón regresar', e); }
   }
 
-  Object.values(grouped).forEach((group, index) => {
-    const container = document.createElement('div');
-    container.className = 'contenedor-actividad';
-    container.setAttribute('data-activity-id', group.meta.srNumber);
+  /**
+   * selectEntry: choose a specific entry index from the last selected group
+   */
+  selectEntry(index) {
+    if (!this.currentGroup || !Array.isArray(this.currentGroup.entries)) return;
+    const entry = this.currentGroup.entries[index];
+    if (!entry) return;
 
-    container.innerHTML = `
-      <div class="corner-dot" title="estado"></div>
-      <div class="activity-card" onclick="selectGroup(this, ${index}, ${JSON.stringify(group).replace(/"/g, '&quot;')})">
-        <div class="activity-header">
-          <div class="activity-number">${group.entries && group.entries[0] && group.entries[0].woNumber ? group.entries[0].woNumber : group.meta.srNumber} <span class="header-vin"> - ${group.meta.vin}</span></div>
+    // Update currentSelection with meta + picked entry
+    this.currentSelection = Object.assign({}, this.currentGroup.meta, entry);
 
-        </div>
-        
-        <div class="activity-details">
-          <div class="detail-item">
-            <div class="mini-cards">
-              <div class="mini-card card l-bg-cyan client">
-                <span class="icon">🏢</span>
-                <div>
-                  <div class="label">Cliente</div>
-                  <div class="value">${group.meta.account}</div>
-                </div>
-              </div>
+    // Debug
+    console.log('selectEntry called with index=', index, 'entry=', entry);
 
-              <div class="mini-card card l-bg-blue-dark">
-                <span class="icon">🚗</span>
-                <div>
-                  <div class="label">Marca</div>
-                  <div class="value">${group.meta.brand} ${group.meta.subBrand}</div>
-                </div>
-              </div>
+    // Highlight UI selection - find by data-entry-index attribute to avoid relying on NodeList ordering
+    const items = this.elements.selectedDetails.querySelectorAll('.entry-item');
+    items.forEach((el) => {
+      const elIdx = parseInt(el.getAttribute('data-entry-index'), 10);
+      if (elIdx === index) el.classList.add('selected'); else el.classList.remove('selected');
+    });
 
-              <div class="mini-card card l-bg-green">
-                <span class="icon">📅</span>
-                <div>
-                  <div class="label">Modelo</div>
-                  <div class="value">${group.meta.model}</div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div class="detail-item">
-            <span class="detail-icon">📋</span>
-            <span class="detail-label">Actividades:</span>
-            <span>${group.entries.map(e => (e.activity || '-') + ' (' + (e.deviceType || '-') + ')').join(', ')}</span>
-          </div>
-        </div>
-      </div>
-    `;
+    this.setStatus(`Orden seleccionada: ${entry.woNumber || entry.woaNumber || this.currentGroup.meta.srNumber}`, 'info');
 
-    wrapper.appendChild(container);
-  });
+    // Render resource selector so user can assign to this specific entry
+    if (this.resources && this.resources.length > 0) this.renderResourceSelector();
+  }
+
+  // Expose some useful getters
+  getPluginData() { return { lastResults: this.lastResults, currentSelection: this.currentSelection }; }
 }
 
-function selectGroup(element, groupIndex, groupDataStr) {
-  // Limpiar selección anterior en contenedores
-  document.querySelectorAll('.contenedor-actividad').forEach(c => {
-    c.classList.remove('selected');
-    const card = c.querySelector('.activity-card'); if (card) card.classList.remove('selected');
-  });
+// Crear instancia global
+const searchPlugin = new SearchPlugin();
 
-  // Marcar como seleccionado (tanto contenedor como card interno)
-  const container = element.closest('.contenedor-actividad');
-  if (container) container.classList.add('selected');
-  element.classList.add('selected');
+// Compatibilidad: wrappers globales que algunas plantillas HTML pueden usar
+function doSearch() { return searchPlugin.doSearch(); }
+function selectGroup(element, groupIndex, groupDataStr) { return searchPlugin.selectGroup(element, groupIndex, groupDataStr); }
+function getPluginData() { return searchPlugin.getPluginData(); }
 
-  // Convertir string JSON de vuelta a objeto
-  const group = JSON.parse(groupDataStr.replace(/&quot;/g, '"'));
-
-  // Seleccionar la primera entrada como ejemplo
-  const firstEntry = group.entries[0] || {};
-
-  currentSelection = Object.assign({}, group.meta, firstEntry);
-
-  // Mostrar detalles de selección
-  selectedDetails.innerHTML = `
-    <div class="detail-grid">
-      <div class="detail-group">
-        <div class="detail-group-label">SR Number</div>
-        <div class="detail-group-value">#${group.meta.srNumber}</div>
-      </div>
-      
-      <div class="detail-group">
-        <div class="detail-group-label">VIN del Vehículo</div>
-        <div class="detail-group-value">
-          <span class="vin-code">${group.meta.vin}</span>
-        </div>
-      </div>
-      
-      <div class="detail-group">
-        <div class="detail-group-label">Cliente</div>
-        <div class="detail-group-value">${group.meta.account}</div>
-      </div>
-      
-      <div class="detail-group">
-        <div class="detail-group-label">Marca</div>
-        <div class="detail-group-value">${group.meta.brand} ${group.meta.subBrand}</div>
-      </div>
-      
-      <div class="detail-group">
-        <div class="detail-group-label">Modelo</div>
-        <div class="detail-group-value">${group.meta.model}</div>
-      </div>
-      
-      <div class="detail-group">
-        <div class="detail-group-label">Órdenes de Trabajo</div>
-        <div class="detail-group-value">${group.entries.length} orden(es)</div>
-      </div>
-    </div>
-    
-        ${group.entries.length > 0 ? `
-      <div style="margin-top: 1rem;">
-        <h6 style="color: var(--text-primary); margin-bottom: 0.5rem;">Detalles de Órdenes:</h6>
-        ${group.entries.map(entry => `
-          <div style="background: var(--bg-secondary); padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 4px; font-size: 0.8rem;">
-            <strong>WO:</strong> ${entry.woNumber} | 
-            <strong>Actividad:</strong> ${(entry.activity || '-') + ' (' + (entry.deviceType || '-') + ')'}
-          </div>
-        `).join('')}
-      </div>
-    ` : ''}
-  `;
-
-  selectionArea.style.display = 'block';
-  selectionArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  setStatus(`Actividad ${firstEntry.woNumber ? '#' + firstEntry.woNumber : '#' + group.meta.srNumber} seleccionada`, 'success');
-}

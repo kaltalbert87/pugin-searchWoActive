@@ -1026,3 +1026,22 @@ body {
     letter-spacing: 0.5px;
   }
 }
+
+/* Entry item styles (selection visible) */
+.entry-item {
+  transition: background-color 120ms ease, transform 120ms ease, border-color 120ms ease;
+  border: 1px solid transparent;
+}
+
+.entry-item.selected {
+  background: linear-gradient(90deg, rgba(16,185,129,0.06), rgba(2,132,199,0.04));
+  border-color: rgba(16,185,129,0.22);
+  box-shadow: 0 4px 14px rgba(2,6,23,0.06);
+  transform: translateY(-2px);
+}
+
+.btn.small {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border-radius: 6px;
+}
