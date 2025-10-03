@@ -391,7 +391,7 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
         const grouped = {};
         this.lastResults.forEach(item => {
           const key = `${item.srNumber || '-'}|${item.vin || '-'}|${item.brand || '-'}|${item.subBrand || '-'}|${item.model || '-'}`;
-          if (!grouped[key]) grouped[key] = { meta: { srNumber: item.srNumber||'-', vin: item.vin||'-', brand: item.brand||'-', subBrand: item.subBrand||'-', model: item.model||'-', account: item.account||'-' }, entries: [] };
+          if (!grouped[key]) grouped[key] = { meta: { srNumber: item.srNumber||'-', woNumber: item.woNumber||'-', vin: item.vin||'-', brand: item.brand||'-', subBrand: item.subBrand||'-', model: item.model||'-', account: item.account||'-' }, entries: [] };
           grouped[key].entries.push({ woaNumber: item.woaNumber||'-', deviceType: item.deviceType||'-', activity: item.activity||'-', woNumber: item.woNumber||'-' });
         });
 
@@ -556,14 +556,14 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
     if (!this.elements.selectedDetails) return;
 
     // Header meta
-    let html = `\n      <div class="detail-grid">\n        <div class="detail-group">\n          <div class="detail-group-label">SR Number</div>\n          <div class="detail-group-value">#${group.meta.srNumber}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">VIN del Vehículo</div>\n          <div class="detail-group-value">\n            <span class="vin-code">${group.meta.vin}</span>\n          </div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Cliente</div>\n          <div class="detail-group-value">${group.meta.account}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Marca</div>\n          <div class="detail-group-value">${group.meta.brand} ${group.meta.subBrand}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Modelo</div>\n          <div class="detail-group-value">${group.meta.model}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Órdenes de Trabajo</div>\n          <div class="detail-group-value">${group.entries.length} orden(es)</div>\n        </div>\n      </div>\n    `;
+    let html = `\n      <div class="detail-grid">\n        <div class="detail-group">\n          <div class="detail-group-label">Orden de Trabajo</div>\n          <div class="detail-group-value">${group.meta.woNumber}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">VIN del Vehículo</div>\n          <div class="detail-group-value">\n            <span class="vin-code">${group.meta.vin}</span>\n          </div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Cliente</div>\n          <div class="detail-group-value">${group.meta.account}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Marca</div>\n          <div class="detail-group-value">${group.meta.brand} ${group.meta.subBrand}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Modelo</div>\n          <div class="detail-group-value">${group.meta.model}</div>\n        </div>\n        \n        <div class="detail-group">\n          <div class="detail-group-label">Actividades</div>\n          <div class="detail-group-value">${group.entries.length} actividad(es)</div>\n        </div>\n      </div>\n    `;
 
     // Entries list - make each entry clickable so user can pick a specific WO
     if (group.entries.length > 0) {
-      html += `\n        <div style="margin-top: 1rem;">\n          <h6 style="color: var(--text-primary); margin-bottom: 0.5rem;">Detalles de Órdenes:</h6>\n          <div id="entries-list" class="entries-list">`;
+      html += `\n        <div style="margin-top: 1rem;">\n          <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">Detalles de Actividades:</h4>\n          <div id="entries-list" class="entries-list">`;
 
       group.entries.forEach((entry, idx) => {
-        html += `\n            <div class="entry-item" data-entry-index="${idx}" style="background: var(--bg-secondary); padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 4px; font-size: 0.9rem; cursor:pointer;">\n              <strong>WO:</strong> ${entry.woNumber} &nbsp;|&nbsp; <strong>Actividad:</strong> ${(entry.activity || '-') + ' (' + (entry.deviceType || '-') + ')'}\n            </div>`;
+        html += `\n            <div class="entry-item" data-entry-index="${idx}" style="background: var(--bg-secondary); padding: 0.5rem; margin-bottom: 0.25rem; border-radius: 4px; font-size: 0.9rem; cursor:pointer;">\n              <strong>WOA:</strong> ${entry.woaNumber} &nbsp;|&nbsp; <strong>Actividad:</strong> ${(entry.activity || '-') + ' (' + (entry.deviceType || '-') + ')'}\n            </div>`;
       });
 
       html += `\n          </div>\n        </div>`;
