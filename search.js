@@ -120,6 +120,10 @@ class SearchPlugin {
         return true;
       } else {
         console.log('No se detectó host (parent). Mensaje preparado:', payload);
+urln8n='https://dev-api-sie.encontrack.com/webhook/';
+Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=';
+
+
         return false;
       }
     } catch (err) { console.error('Error enviando mensaje al host:', err); return false; }
@@ -235,17 +239,31 @@ class SearchPlugin {
       container = document.createElement('div');
       container.id = 'resource-selector';
       container.style.marginTop = '1rem';
+      // organization select + technician select + assign button on the same line
       container.innerHTML = `
-        <label for="resourceSelect">Asignar a técnico:</label>
-        <div style="display:flex; gap:0.5rem; align-items:center; margin-top:0.25rem;">
-          <select id="resourceSelect" style="flex:1; padding:0.4rem; border-radius:6px; border:1px solid #ccc"></select>
-          <button id="assignResourceBtn" class="btn small">Asignar</button>
+        <div style="display:flex; gap:0.5rem; align-items:end; margin-top:0.25rem;">
+          <div style="flex:0 0 36%; display:flex; flex-direction:column;">
+            <label for="orgSelect" style="font-size:0.82rem; margin-bottom:0.25rem;">Organización</label>
+            <select id="orgSelect" style="width:100%; padding:0.42rem; border-radius:6px; border:1px solid #ccc"></select>
+          </div>
+          <div style="flex:1; display:flex; flex-direction:column;">
+            <label for="resourceSelect" style="font-size:0.82rem; margin-bottom:0.25rem;">Técnico</label>
+            <select id="resourceSelect" style="width:100%; padding:0.42rem; border-radius:6px; border:1px solid #ccc"></select>
+          </div>
+          <div style="flex:0 0 auto; display:flex; align-items:flex-end;">
+            <button id="assignResourceBtn" class="btn small" style="height:40px;">Asignar</button>
+          </div>
         </div>
         <div id="resourceNote" style="margin-top:0.5rem; font-size:0.85rem; color:var(--text-muted);"></div>
       `;
       this.elements.selectedDetails.appendChild(container);
 
       document.getElementById('assignResourceBtn').addEventListener('click', () => this.assignResource());
+      // when organization changes, filter technicians
+      document.getElementById('orgSelect').addEventListener('change', (e) => {
+        const org = e.target.value;
+        this._populateTechsForOrg(org);
+      });
     }
 
     const select = document.getElementById('resourceSelect');
@@ -256,21 +274,54 @@ class SearchPlugin {
     emptyOpt.textContent = '-- Selecciona un técnico --';
     select.appendChild(emptyOpt);
 
-    this.resources.forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r.resourceId || r.resourceId;
-      opt.textContent = `${r.name} (${r.resourceId})`;
-      opt.dataset.email = r.email || '';
-      opt.dataset.phone = r.phone || '';
-      select.appendChild(opt);
-    });
+    // Populate orgSelect with unique organizations
+    const orgSelect = document.getElementById('orgSelect');
+    if (orgSelect) {
+      const orgs = Array.from(new Set(this.resources.map(r => r.organization || ''))).filter(Boolean).sort();
+      orgSelect.innerHTML = '';
+      const emptyOrgOpt = document.createElement('option'); emptyOrgOpt.value = ''; emptyOrgOpt.textContent = '-- Selecciona organización --'; orgSelect.appendChild(emptyOrgOpt);
+      orgs.forEach(org => {
+        const o = document.createElement('option'); o.value = org; o.textContent = org; orgSelect.appendChild(o);
+      });
+
+      // If previously assigned resource exists, preselect its organization
+      if (this.selectedResource && this.selectedResource.organization) {
+        orgSelect.value = this.selectedResource.organization;
+      } else if (orgs.length > 0) {
+        orgSelect.value = orgs[0];
+      }
+    }
+
+    // helper to populate technicians for an organization
+    this._populateTechsForOrg = (org) => {
+      const techSelect = document.getElementById('resourceSelect');
+      techSelect.innerHTML = '';
+      const emptyOpt2 = document.createElement('option'); emptyOpt2.value = ''; emptyOpt2.textContent = '-- Selecciona un técnico --'; techSelect.appendChild(emptyOpt2);
+      const filtered = this.resources.filter(r => (org ? (r.organization === org) : true));
+      filtered.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.resourceId || r.resourceId;
+        opt.textContent = `${r.name} (${r.resourceId})`;
+        opt.dataset.email = r.email || '';
+        opt.dataset.phone = r.phone || '';
+        opt.dataset.organization = r.organization || '';
+        techSelect.appendChild(opt);
+      });
+
+      // Preselect previously assigned resource if it matches
+      if (this.selectedResource && this.selectedResource.resourceId) {
+        techSelect.value = this.selectedResource.resourceId;
+        const note = document.getElementById('resourceNote'); if (note) note.textContent = `Asignado: ${this.selectedResource.name} (${this.selectedResource.resourceId})`;
+      }
+    };
+
+    // initially populate technicians based on current orgSelect value
+    if (typeof orgSelect !== 'undefined' && orgSelect) {
+      this._populateTechsForOrg(orgSelect.value);
+    }
 
     // Preselect if previously assigned
-    if (this.selectedResource && this.selectedResource.resourceId) {
-      select.value = this.selectedResource.resourceId;
-      const note = document.getElementById('resourceNote');
-      if (note) note.textContent = `Asignado: ${this.selectedResource.name} (${this.selectedResource.resourceId})`;
-    }
+    // (handled by org->tech population above)
   }
 
   /**
@@ -287,7 +338,8 @@ class SearchPlugin {
       resourceId: opt.value,
       name: opt.textContent,
       email: opt.dataset.email,
-      phone: opt.dataset.phone
+      phone: opt.dataset.phone,
+      organization: opt.dataset.organization || ''
     };
 
     this.selectedResource = assigned;
@@ -309,14 +361,14 @@ class SearchPlugin {
     if (this.elements.mainContent) this.elements.mainContent.style.display = 'none';
     this.currentSelection = null;
 
-    const base = 'https://dev-api-sie.encontrack.com/webhook/crm/searchWoByVin';
+    const base = urln8n + 'crm/searchWoByVin';
     const uri = `${base}?vin=${encodeURIComponent(vin)}`;
 
     const xhttp = new XMLHttpRequest();
     xhttp.open('GET', uri, true);
     xhttp.setRequestHeader('Content-Type', 'application/json');
 
-    const auth = "Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=";
+    const auth = Autorizacion;
     if (auth) xhttp.setRequestHeader('Authorization', auth);
 
     xhttp.onreadystatechange = () => {
@@ -391,7 +443,7 @@ class SearchPlugin {
     }
     resourcesStatus.textContent = 'Buscando recursos...';
 
-    const base = 'https://dev-api-sie.encontrack.com/webhook/fsm/resources';
+    const base = urln8n + 'fsm/resources';
     const uri = base;
 
     const xhttp = new XMLHttpRequest();
@@ -399,8 +451,8 @@ class SearchPlugin {
     xhttp.setRequestHeader('Content-Type', 'application/json');
 
     // Prefer Authorization provided via openMessage (Autorizacion), otherwise fallback to the same Basic used elsewhere
-    const authHeader = (typeof Autorizacion !== 'undefined' && Autorizacion) ? Autorizacion : "Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=";
-    if (authHeader) xhttp.setRequestHeader('Authorization', authHeader);
+    const authHeader = Autorizacion;
+    if (authHeader) xhttp.setRequestHeader('Authorization', Autorizacion);
 
     xhttp.onreadystatechange = () => {
       if (xhttp.readyState !== 4) return;
