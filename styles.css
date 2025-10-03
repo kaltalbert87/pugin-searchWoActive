@@ -1,25 +1,27 @@
 /* styles.css - Estilos para Field Service Oracle - Buscar Actividades por VIN */
 
 :root {
-  --primary-color: #0073e6;
-  --primary-dark: #005bb5;
-  --primary-light: #4da6ff;
-  --secondary-color: #f7fafc;
-  --accent-color: #00a86b;
+  /* corporate, desaturated palette */
+  --primary-color: #1e3a8a; /* deep blue */
+  --primary-dark: #113f6b; /* darker blue */
+  --primary-light: #3b63b3;
+  --secondary-color: #f4f6f8;
+  --accent-color: #138a63; /* muted green accent */
   --warning-color: #ff8c00;
   --error-color: #dc3545;
   --text-primary: #2d3748;
   --text-secondary: #718096;
   --text-light: #a0aec0;
-  --border-color: #e2e8f0;
+  --border-color: #e6edf3;
   --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --bg-secondary: #f7f9fb;
+  /* softer, lower-opacity shadows for a corporate feel */
+  --shadow-sm: 0 1px 6px rgba(16,24,40,0.04);
+  --shadow-md: 0 8px 20px rgba(16,24,40,0.06);
+  --shadow-lg: 0 20px 40px rgba(16,24,40,0.08);
   --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --spacing-xs: 0.25rem;
   --spacing-sm: 0.5rem;
   --spacing-md: 0.75rem;
@@ -53,22 +55,22 @@ body {
 .container {
   max-width: 1100px;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 20px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
   overflow: hidden;
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(230,240,250,0.6);
 }
 
 .header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 50%, #1e3a8a 100%);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
   color: white;
   padding: var(--spacing-xl) var(--spacing-md);
   text-align: center;
   position: relative;
   overflow: hidden;
-  animation: gradientShift 8s ease-in-out infinite;
+  animation: gradientShift 12s ease-in-out infinite;
 }
 
 @keyframes gradientShift {
@@ -139,16 +141,16 @@ body {
 
 /* VIN Input destacado */
 .vin-search-card {
-  background: linear-gradient(135deg, #1a237e 0%, #283593 50%, #3949ab 100%);
-  border-radius: 16px;
-  padding: 20px 24px;
+  background: linear-gradient(135deg, #162c57 0%, #203a6f 100%);
+  border-radius: 10px;
+  padding: 16px 18px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   color: white;
-  box-shadow: 0 8px 32px rgba(26, 35, 126, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 20px rgba(16,24,40,0.06);
   margin-bottom: var(--spacing-md);
-  backdrop-filter: blur(10px);
+  backdrop-filter: none;
   position: relative;
   overflow: hidden;
 }
@@ -181,7 +183,8 @@ body {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   transition: all 0.3s ease;
-  animation: float 3s ease-in-out infinite;
+  /* remove playful float for corporate look */
+  animation: none;
 }
 
 .vin-icon:hover {
@@ -267,19 +270,19 @@ body {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(0,0,0,0.03);
+  border-radius: 8px;
+  background: rgba(245,247,250,0.9);
   position: relative;
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 13px;
-  box-shadow: 0 6px 18px rgba(16,24,40,0.06);
+  font-size: 12px;
+  box-shadow: 0 6px 18px rgba(16,24,40,0.04);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .mini-card:hover {
-  transform: translateY(-6px) rotateY(5deg) rotateX(5deg);
-  box-shadow: 0 20px 50px rgba(16,24,40,0.2), 0 8px 16px rgba(0,0,0,0.1);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(16,24,40,0.07);
 }
 
 .mini-card::before {
@@ -289,9 +292,10 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
-  transform: translateX(-100%);
-  transition: transform 0.6s;
+  /* subtle sheen disabled for corporate look */
+  background: transparent;
+  transform: none;
+  transition: none;
   border-radius: inherit;
 }
 
@@ -324,7 +328,7 @@ body {
 
 /* Distinct styles */
 .mini-card.brand {
-  background: linear-gradient(135deg, #0d47a1, #1976d2);
+  background: linear-gradient(90deg, #1e3a8a 0%, #2a56a8 100%);
   color: #ffffff;
 }
 
@@ -334,9 +338,9 @@ body {
 }
 
 .mini-card.model {
-  background: linear-gradient(135deg, #e6f9f0, #d1f0e0);
-  color: #045d48;
-  border: 1px solid rgba(4,93,72,0.06);
+  background: linear-gradient(90deg, #f7fafb 0%, #eef6f7 100%);
+  color: var(--text-primary);
+  border: 1px solid rgba(20,40,60,0.04);
 }
 
 .mini-card.model .icon {
@@ -346,9 +350,9 @@ body {
 
 /* Cliente mini-card */
 .mini-card.client {
-  background: linear-gradient(135deg, #00c9a7 0%, #00b389 100%);
-  color: #042921;
-  border: 1px solid rgba(0, 179, 120, 0.12);
+  background: linear-gradient(90deg, rgba(19,138,99,0.08), rgba(19,138,99,0.02));
+  color: var(--text-primary);
+  border: 1px solid rgba(19,138,99,0.08);
 }
 
 .mini-card.client .icon {
@@ -363,7 +367,7 @@ body {
   border: none;
   position: relative;
   margin-bottom: 30px;
-  box-shadow: 0 0.46875rem 2.1875rem rgba(90,97,105,0.1), 0 0.9375rem 1.40625rem rgba(90,97,105,0.1), 0 0.25rem 0.53125rem rgba(90,97,105,0.12), 0 0.125rem 0.1875rem rgba(90,97,105,0.1);
+  box-shadow: var(--shadow-md);
 }
 
 .l-bg-cherry {
@@ -532,13 +536,11 @@ body {
 
 /* Contorno llamativo para el área de resultados */
 #main-content {
-  border: 2px solid transparent;
-  border-radius: 12px;
-  padding: 10px;
-  /* white inner with colorful border via border-box layer */
-  background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(255,255,255,0.99)) padding-box,
-              linear-gradient(90deg, #4286f4, #00a86b) border-box;
-  box-shadow: 0 12px 36px rgba(66,134,244,0.06), 0 6px 20px rgba(0,168,107,0.04);
+  border: 1px solid rgba(220,230,240,0.6);
+  border-radius: 10px;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.995), rgba(255,255,255,0.995));
+  box-shadow: 0 8px 26px rgba(16,24,40,0.04);
   margin-bottom: var(--spacing-md);
   position: relative;
 }
@@ -591,29 +593,31 @@ body {
 
 /* Actividades */
 .contenedor-actividad {
-  /* Card llamativa: gradiente vivo, acento lateral animado, sombra profunda */
-  background: linear-gradient(120deg, #e5e0fa 0%, #8bc8e1 100%);
-  border-radius: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 20px 40px rgba(16,24,40,0.08), 0 8px 16px rgba(0,168,107,0.05), inset 0 1px 0 rgba(255,255,255,0.2);
-  transition: all 0.3s cubic-bezier(.4,2,.3,1);
+  /* slightly stronger corporate card tint so each result stands out */
+  background: linear-gradient(180deg, #f6fbff 0%, #eaf4fb 100%);
+  border-radius: 12px;
+  margin-bottom: 18px;
+  box-shadow: 0 14px 32px rgba(16,24,40,0.07);
+  transition: all 0.28s ease;
   position: relative;
   overflow: visible;
-  border: 1px solid rgba(255,255,255,0.3);
+  border: 1px solid rgba(17,55,90,0.07);
+  padding: 10px; /* small outer padding so internal card spacing is consistent */
 }
 
 /* Corner dots indicadores de estado */
 .contenedor-actividad::after {
+  /* subtle status dot */
   content: '';
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 12px;
-  height: 12px;
-  background: linear-gradient(45deg, #00ff88, #00cc6a);
+  top: 14px;
+  right: 14px;
+  width: 10px;
+  height: 10px;
+  background: linear-gradient(45deg, rgba(19,138,99,0.9), rgba(17,63,107,0.9));
   border-radius: 50%;
-  box-shadow: 0 0 12px rgba(0, 255, 136, 0.4);
-  animation: pulse 2s infinite;
+  box-shadow: 0 0 8px rgba(19,138,99,0.18);
+  animation: none;
 }
 
 @keyframes pulse {
@@ -627,12 +631,12 @@ body {
   position: absolute;
   top: 0;
   left: -2px;
-  width: 10px;
+  width: 6px;
   height: 100%;
-  background: linear-gradient(180deg, #43cea2 0%, #185a9d 100%);
-  border-radius: 12px;
-  box-shadow: 0 0 16px 4px #43cea2aa;
-  animation: acentoGlow 2.2s infinite alternate;
+  background: linear-gradient(180deg, var(--accent-color), var(--primary-color));
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(19,138,99,0.12);
+  animation: none;
 }
 
 @keyframes acentoGlow {
@@ -641,10 +645,10 @@ body {
 }
 
 .contenedor-actividad:hover {
-  box-shadow: 0 32px 80px rgba(16,24,40,0.25), 0 12px 24px rgba(0,168,107,0.2), inset 0 1px 0 rgba(255,255,255,0.4);
-  transform: scale(1.03) translateY(-8px) rotateX(2deg);
-  background: linear-gradient(120deg, #e8e4fb 0%, #92cde5 100%);
-  border: 1px solid rgba(255,255,255,0.5);
+  box-shadow: 0 18px 40px rgba(16,24,40,0.08);
+  transform: translateY(-4px);
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfc 100%);
+  border: 1px solid rgba(20,40,60,0.03);
 }
 
 .contenedor-actividad:hover::after {
@@ -659,12 +663,19 @@ body {
 }
 
 .activity-card:hover {
-  background: var(--bg-secondary);
+  background: #fbfdff;
 }
 
 .activity-card.selected {
-  background: linear-gradient(135deg, #f0fff4, #c6f6d5);
-  border-left: 4px solid var(--accent-color);
+  background: linear-gradient(180deg, #f7fdf7, #eef8ef);
+  border-left: 3px solid rgba(19,138,99,0.9);
+}
+
+.activity-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
 }
 
 .activity-header {
@@ -675,9 +686,40 @@ body {
 }
 
 .activity-number {
-  font-size: var(--text-lg);
+  /* Primary identifier but more restrained */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--text-xl);
   font-weight: 700;
-  color: var(--primary-color);
+  color: var(--primary-dark);
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 8px;
+  box-shadow: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-number::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 22px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--accent-color), var(--primary-color));
+  flex: none;
+}
+
+.header-vin {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-secondary);
+  opacity: 0.95;
+  margin-left: 8px;
 }
 
 .activity-status {
