@@ -395,11 +395,13 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
           grouped[key].entries.push({ woaNumber: item.woaNumber||'-', deviceType: item.deviceType||'-', activity: item.activity||'-', woNumber: item.woNumber||'-' });
         });
 
-        this.renderGroups(grouped);
+  this.renderGroups(grouped);
 
-        if (this.elements.mainContent) this.elements.mainContent.style.display = 'block';
-        if (this.elements.noResults) this.elements.noResults.style.display = 'none';
-        if (this.elements.resultsHeader) this.elements.resultsHeader.style.display = 'flex';
+  // Ensure results area is visible after a search (in case it was hidden by selection)
+  if (this.elements.resultsEl) this.elements.resultsEl.style.display = '';
+  if (this.elements.mainContent) this.elements.mainContent.style.display = 'block';
+  if (this.elements.noResults) this.elements.noResults.style.display = 'none';
+  if (this.elements.resultsHeader) this.elements.resultsHeader.style.display = 'flex';
         this.setStatus(this.lastResults.length + ' registros encontrados', 'success');
 
         // Preload resources so they are ready when the user selects a record
@@ -509,11 +511,12 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
   }
 
   renderGroups(grouped) {
-    if (!this.elements.resultsEl) return;
-    this.elements.resultsEl.innerHTML = '';
-    let wrapper = document.querySelector('.results-scroll');
-    if (!wrapper) { wrapper = document.createElement('div'); wrapper.className = 'results-scroll'; this.elements.resultsEl.appendChild(wrapper); }
-    else wrapper.innerHTML = '';
+  if (!this.elements.resultsEl) return;
+  this.elements.resultsEl.innerHTML = '';
+  // scope wrapper to the results element to avoid picking an old container elsewhere in the DOM
+  let wrapper = this.elements.resultsEl.querySelector('.results-scroll');
+  if (!wrapper) { wrapper = document.createElement('div'); wrapper.className = 'results-scroll'; this.elements.resultsEl.appendChild(wrapper); }
+  else wrapper.innerHTML = '';
 
     Object.values(grouped).forEach((group, index) => {
       const container = document.createElement('div');
