@@ -93,6 +93,59 @@ class SearchPlugin {
     }
   }
 
+  /* Modal helpers: dynamically create a modal in the document and return a promise that resolves with true/false */
+  _ensureModal() {
+    if (this._modalEl) return this._modalEl;
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fs-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="fs-modal" role="dialog" aria-modal="true">
+        <div class="fs-modal-header">
+          <div class="fs-modal-title">Confirmación</div>
+        </div>
+        <div class="fs-modal-body" id="fs-modal-body">Mensaje</div>
+        <div class="fs-modal-actions">
+          <button class="btn-primary" id="fs-confirm">Aceptar</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+    this._modalEl = backdrop;
+  const confirmBtn = backdrop.querySelector('#fs-confirm');
+  const bodyEl = backdrop.querySelector('#fs-modal-body');
+
+    // Wire events
+    confirmBtn.addEventListener('click', () => {
+      this._resolveModal && this._resolveModal(true);
+      this.hideModal();
+    });
+
+    // Do not close when clicking backdrop; require explicit accept
+    // (if desired in future, we can enable click-outside-to-cancel)
+
+    return this._modalEl;
+  }
+
+  showModal(options = {}) {
+    const el = this._ensureModal();
+    const bodyEl = el.querySelector('#fs-modal-body');
+  const confirmBtn = el.querySelector('#fs-confirm');
+  bodyEl.textContent = options.message || '¿Confirmar?';
+  confirmBtn.textContent = options.confirmText || 'Aceptar';
+
+    el.classList.add('show');
+    // return promise that resolves when user chooses
+    return new Promise((resolve) => { this._resolveModal = resolve; });
+  }
+
+  hideModal() {
+    if (!this._modalEl) return;
+    this._modalEl.classList.remove('show');
+    // small cleanup: remove from DOM after animation
+    setTimeout(() => { try { if (this._modalEl && this._modalEl.parentNode) this._modalEl.parentNode.removeChild(this._modalEl); } catch(e){} this._modalEl = null; }, 220);
+  }
+
   // status helper
   setStatus(msg, type = 'info') {
     const icons = { 'success':'✅','warning':'⚠️','danger':'❌','info':'ℹ️' };
@@ -204,7 +257,7 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
     }
   }
 
-  confirmSelection() {
+  async confirmSelection() {
     console.log('confirmSelection() invoked - currentSelection:', this.currentSelection);
 
     if (!this.currentSelection) return this.setStatus('No hay selección activa', 'warning');
@@ -275,7 +328,7 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
       console.log('confirmSelection: no Authorization header available');
     }
 
-    xhttp.onreadystatechange = () => {
+  xhttp.onreadystatechange = async () => {
       console.log('confirmSelection: XHR readyState=', xhttp.readyState, 'status=', xhttp.status);
       if (xhttp.readyState !== 4) return;
       console.log('confirmSelection: XHR completed, responseText=', xhttp.responseText);
@@ -307,12 +360,27 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
           sessionStorage.setItem('selectedActivity', JSON.stringify(this.currentSelection));
           this.setStatus('Técnico asignado con éxito y selección confirmada', 'success');
 
-          // Don't send anything to parent - handle success locally (return to results)
+          // Ask the user before navigating back / closing the view using a styled modal
           try {
-            // Clear the selection panel and show results again
-            this.clearSelection();
-            // Optionally refresh results or keep current state
-          } catch (e) { console.warn('confirmSelection: error during local success handling', e); }
+            const userConfirmed = await this.showModal({
+              message: 'Asignación enviada correctamente.',
+              confirmText: 'Aceptar'
+            });
+            if (userConfirmed) {
+              if (this.isLocal || (window.parent === window)) {
+                console.log('confirmSelection: user confirmed - running in local mode -> calling history.back() to close view');
+                setTimeout(() => { try { history.back(); } catch (e) { console.warn('confirmSelection: history.back() failed', e); } }, 300);
+              } else if (typeof fieldServicePlugin !== 'undefined' && typeof fieldServicePlugin.closePlugin === 'function') {
+                console.log('confirmSelection: user confirmed - calling fieldServicePlugin.closePlugin to notify host');
+                try { fieldServicePlugin.closePlugin(this.currentSelection); } catch (e) { console.warn('confirmSelection: fieldServicePlugin.closePlugin failed', e); this.clearSelection(); }
+              } else {
+                console.log('confirmSelection: user confirmed but no host API available, clearing selection locally');
+                this.clearSelection();
+              }
+            } else {
+              console.log('confirmSelection: user chose to remain on the page after successful assignment');
+            }
+          } catch (e) { console.warn('confirmSelection: error during user-confirm handling', e); }
         } else {
           const msg = first.message || 'Error desconocido en asignación';
           console.log('confirmSelection: API returned error result', first);
