@@ -367,15 +367,21 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
               confirmText: 'Aceptar'
             });
             if (userConfirmed) {
-              if (this.isLocal || (window.parent === window)) {
-                console.log('confirmSelection: user confirmed - running in local mode -> calling history.back() to close view');
-                setTimeout(() => { try { history.back(); } catch (e) { console.warn('confirmSelection: history.back() failed', e); } }, 300);
-              } else if (typeof fieldServicePlugin !== 'undefined' && typeof fieldServicePlugin.closePlugin === 'function') {
-                console.log('confirmSelection: user confirmed - calling fieldServicePlugin.closePlugin to notify host');
-                try { fieldServicePlugin.closePlugin(this.currentSelection); } catch (e) { console.warn('confirmSelection: fieldServicePlugin.closePlugin failed', e); this.clearSelection(); }
-              } else {
-                console.log('confirmSelection: user confirmed but no host API available, clearing selection locally');
-                this.clearSelection();
+              try {
+                // Enviar el payload de cierre solicitado por OFS
+                const messageData = {
+                  apiVersion: 1,
+                  method: 'close',
+                  backScreen: 'mobility',
+                  wakeupNeeded: false
+                };
+                console.log('confirmSelection: enviando messageData de cierre al host', messageData);
+                this.sendWebMessage(messageData);
+                // Como medida de seguridad, intentar volver atrás localmente si el parent no cierra
+                setTimeout(() => { try { history.back(); } catch (e) { console.warn('confirmSelection: history.back() falló', e); this.clearSelection(); } }, 600);
+              } catch (e) {
+                console.warn('confirmSelection: error enviando messageData, intentando history.back()', e);
+                try { history.back(); } catch (err) { this.clearSelection(); }
               }
             } else {
               console.log('confirmSelection: user chose to remain on the page after successful assignment');
