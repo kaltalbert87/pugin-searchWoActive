@@ -205,26 +205,145 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
   }
 
   confirmSelection() {
+    console.log('confirmSelection() invoked - currentSelection:', this.currentSelection);
+
     if (!this.currentSelection) return this.setStatus('No hay selección activa', 'warning');
 
-    sessionStorage.setItem('selectedActivity', JSON.stringify(this.currentSelection));
-    console.log('Registro confirmado:', this.currentSelection);
-    this.setStatus('Registro confirmado: ' + (this.currentSelection.woaNumber || this.currentSelection.srNumber), 'success');
+    // Prevent double submissions
+    if (this._confirming) {
+      console.log('confirmSelection: already confirming, aborting');
+      return this.setStatus('Asignación en proceso, espera...', 'info');
+    }
+    this._confirming = true;
+    console.log('confirmSelection: starting confirmation flow');
 
-    // Attach selected resource if present
-    if (this.selectedResource) {
-      this.currentSelection.assignedResource = this.selectedResource;
+    // If the user selected a technician in the select but did not click "Asignar", pick it up automatically
+    try {
+      const rs = document.getElementById('resourceSelect');
+      if (!this.selectedResource && rs && rs.value) {
+        console.log('confirmSelection: resourceSelect has value, auto-assigning from select ->', rs.value);
+        this.assignResource();
+      }
+    } catch (e) { console.warn('confirmSelection: error during auto-assign attempt', e); }
+
+    // Ensure a resource has been selected
+    const resourceId = this.selectedResource ? this.selectedResource.resourceId : null;
+    console.log('confirmSelection: selectedResource after auto-assign attempt:', this.selectedResource);
+    if (!resourceId) {
+      this._confirming = false;
+      console.log('confirmSelection: no resource selected, aborting');
+      return this.setStatus('No hay técnico asignado. Asigna un técnico antes de confirmar.', 'warning');
     }
 
-    const messageData = { apiVersion: 1, method: 'close', activity: this.currentSelection };
-    const sent = this.sendWebMessage(messageData);
-    if (!sent) {
-      if (typeof window.openMessage === 'function') {
-        try { window.openMessage(this.currentSelection); } catch(e) { console.warn('Fallback openMessage failed', e); }
-      } else {
-        console.log('No host detected; activity saved to sessionStorage only.');
+    // Show a spinner while processing the assignment. Reuse the existing loading element if available
+    let prevLoadingHtml = null;
+    if (this.elements.loading) {
+      prevLoadingHtml = this.elements.loading.innerHTML;
+      this.elements.loading.innerHTML = '<p>Procesando asignación...</p>';
+      this.elements.loading.style.display = 'block';
+    } else {
+      const spinnerArea = document.getElementById('spinnerArea');
+      if (spinnerArea) {
+        spinnerArea.dataset.prev = spinnerArea.innerHTML || '';
+        spinnerArea.innerHTML = '<div id="confirm-spinner">Procesando asignación...</div>';
       }
     }
+
+    // Disable confirm button while request is in flight
+    if (this.elements.confirmBtn) {
+      this.elements.confirmBtn.disabled = true;
+      this.elements.confirmBtn.dataset.prevText = this.elements.confirmBtn.textContent || '';
+      this.elements.confirmBtn.textContent = 'Procesando...';
+    }
+
+    // Build PATCH request payload
+    const base = urln8n + 'crm/SelfAssigned';
+    const uri = base;
+    const payload = {
+      resourceid: String(resourceId),
+      woNumber: this.currentSelection.woNumber || this.currentSelection.srNumber || this.currentSelection.woaNumber || ''
+    };
+    console.log('confirmSelection: prepared payload, url=', uri, 'payload=', payload);
+
+    const xhttp = new XMLHttpRequest();
+    xhttp.open('PATCH', uri, true);
+    xhttp.setRequestHeader('Content-Type', 'application/json');
+    if (Autorizacion) {
+      xhttp.setRequestHeader('Authorization', Autorizacion);
+      console.log('confirmSelection: set Authorization header');
+    } else {
+      console.log('confirmSelection: no Authorization header available');
+    }
+
+    xhttp.onreadystatechange = () => {
+      console.log('confirmSelection: XHR readyState=', xhttp.readyState, 'status=', xhttp.status);
+      if (xhttp.readyState !== 4) return;
+      console.log('confirmSelection: XHR completed, responseText=', xhttp.responseText);
+
+      // done - restore UI
+      this._confirming = false;
+      if (this.elements.loading) {
+        this.elements.loading.style.display = 'none';
+        this.elements.loading.innerHTML = prevLoadingHtml || '<p>Buscando actividades...</p>';
+      } else {
+        const spinnerArea = document.getElementById('spinnerArea'); if (spinnerArea) spinnerArea.innerHTML = spinnerArea.dataset.prev || '';
+      }
+      if (this.elements.confirmBtn) {
+        this.elements.confirmBtn.disabled = false;
+        if (this.elements.confirmBtn.dataset.prevText) { this.elements.confirmBtn.textContent = this.elements.confirmBtn.dataset.prevText; delete this.elements.confirmBtn.dataset.prevText; }
+      }
+
+      if (xhttp.status >= 200 && xhttp.status < 300) {
+        let data;
+        try { data = JSON.parse(xhttp.responseText); } catch (e) { this.setStatus('Respuesta inválida del servidor (asignación)', 'danger'); console.error('confirmSelection: JSON parse error', e); return; }
+
+        console.log('confirmSelection: parsed response data=', data);
+        const arr = Array.isArray(data) ? data : [];
+        const first = arr[0] || {};
+        if (first.result === 'success') {
+          console.log('confirmSelection: API returned success');
+          // Attach selected resource and persist selection
+          if (this.selectedResource) this.currentSelection.assignedResource = this.selectedResource;
+          sessionStorage.setItem('selectedActivity', JSON.stringify(this.currentSelection));
+          this.setStatus('Técnico asignado con éxito y selección confirmada', 'success');
+
+          // Don't send anything to parent - handle success locally (return to results)
+          try {
+            // Clear the selection panel and show results again
+            this.clearSelection();
+            // Optionally refresh results or keep current state
+          } catch (e) { console.warn('confirmSelection: error during local success handling', e); }
+        } else {
+          const msg = first.message || 'Error desconocido en asignación';
+          console.log('confirmSelection: API returned error result', first);
+          this.setStatus('Error al asignar técnico: ' + msg, 'danger');
+        }
+      } else {
+        this.setStatus('Error en la petición de asignación: ' + xhttp.status, 'danger');
+        console.error('confirmSelection: Asignación error', xhttp.status, xhttp.responseText);
+      }
+    };
+
+    xhttp.onerror = () => {
+      this._confirming = false;
+      console.error('confirmSelection: XHR onerror fired');
+      if (this.elements.loading) { this.elements.loading.style.display = 'none'; this.elements.loading.innerHTML = prevLoadingHtml || '<p>Buscando actividades...</p>'; }
+      if (this.elements.confirmBtn) { this.elements.confirmBtn.disabled = false; if (this.elements.confirmBtn.dataset.prevText) { this.elements.confirmBtn.textContent = this.elements.confirmBtn.dataset.prevText; delete this.elements.confirmBtn.dataset.prevText; } }
+      this.setStatus('Error de red al asignar técnico', 'danger');
+    };
+
+    xhttp.ontimeout = () => {
+      this._confirming = false;
+      console.warn('confirmSelection: XHR ontimeout fired');
+      if (this.elements.loading) { this.elements.loading.style.display = 'none'; this.elements.loading.innerHTML = prevLoadingHtml || '<p>Buscando actividades...</p>'; }
+      if (this.elements.confirmBtn) { this.elements.confirmBtn.disabled = false; if (this.elements.confirmBtn.dataset.prevText) { this.elements.confirmBtn.textContent = this.elements.confirmBtn.dataset.prevText; delete this.elements.confirmBtn.dataset.prevText; } }
+      this.setStatus('Tiempo de espera agotado al asignar técnico', 'warning');
+    };
+
+    xhttp.timeout = 30000;
+    console.log('confirmSelection: sending XHR...', uri);
+    xhttp.send(JSON.stringify(payload));
+    console.log('confirmSelection: XHR.send called');
   }
 
   /**
