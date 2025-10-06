@@ -74,7 +74,11 @@ class SearchPlugin {
     if (this.elements.searchBtn) this.elements.searchBtn.addEventListener('click', () => this.doSearch());
     if (this.elements.vinInput) this.elements.vinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doSearch(); });
     if (this.elements.clearSelection) this.elements.clearSelection.addEventListener('click', () => this.clearSelection());
-    if (this.elements.confirmBtn) this.elements.confirmBtn.addEventListener('click', () => this.confirmSelection());
+  if (this.elements.confirmBtn) this.elements.confirmBtn.addEventListener('click', () => this.confirmSelection());
+
+  // Ensure confirm button is disabled by default; it will be enabled only when the user
+  // explicitly clicks the "Asignar" button which calls assignResource().
+  if (this.elements.confirmBtn) this.elements.confirmBtn.disabled = true;
 
   // Listen for messages from host using a dedicated handler (mirrors fieldservice.js)
   window.addEventListener('message', this.getWebMessage.bind(this), false);
@@ -242,6 +246,9 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
   // selection helpers
   clearSelection() {
     this.currentSelection = null;
+    // Clear any previously assigned resource and disable confirm button
+    this.selectedResource = null;
+    if (this.elements.confirmBtn) this.elements.confirmBtn.disabled = true;
     if (this.elements.selectionArea) this.elements.selectionArea.style.display = 'none';
     // Restore results list visibility so user can pick another
     if (this.elements.resultsEl) this.elements.resultsEl.style.display = '';
@@ -271,13 +278,9 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
     console.log('confirmSelection: starting confirmation flow');
 
     // If the user selected a technician in the select but did not click "Asignar", pick it up automatically
-    try {
-      const rs = document.getElementById('resourceSelect');
-      if (!this.selectedResource && rs && rs.value) {
-        console.log('confirmSelection: resourceSelect has value, auto-assigning from select ->', rs.value);
-        this.assignResource();
-      }
-    } catch (e) { console.warn('confirmSelection: error during auto-assign attempt', e); }
+    // NOTE: We intentionally DO NOT auto-assign from the select here. The UX requirement
+    // is that the Confirm button only becomes active after the user clicks "Asignar".
+    // Therefore confirmSelection() will abort if no explicit assigned resource exists.
 
     // Ensure a resource has been selected
     const resourceId = this.selectedResource ? this.selectedResource.resourceId : null;
@@ -539,6 +542,8 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
     const note = document.getElementById('resourceNote');
     if (note) note.textContent = `Asignado: ${assigned.name} (${assigned.resourceId})`;
     this.setStatus(`Técnico asignado: ${assigned.name}`, 'success');
+    // Enable the confirm button now that a resource has been explicitly assigned
+    if (this.elements.confirmBtn) this.elements.confirmBtn.disabled = false;
   }
 
   // main search flow
@@ -834,6 +839,11 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
     });
 
     this.setStatus(`Orden seleccionada: ${entry.woNumber || entry.woaNumber || this.currentGroup.meta.srNumber}`, 'info');
+
+    // When selecting a different entry, clear any explicit assigned resource and require
+    // the user to click "Asignar" again before enabling Confirm.
+    this.selectedResource = null;
+    if (this.elements.confirmBtn) this.elements.confirmBtn.disabled = true;
 
     // Render resource selector so user can assign to this specific entry
     if (this.resources && this.resources.length > 0) this.renderResourceSelector();
