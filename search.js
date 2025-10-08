@@ -497,7 +497,7 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
       filtered.forEach(r => {
         const opt = document.createElement('option');
         opt.value = r.resourceId || r.resourceId;
-        opt.textContent = `${r.name} (${r.resourceId})`;
+        opt.textContent = `${r.name}`;
         opt.dataset.email = r.email || '';
         opt.dataset.phone = r.phone || '';
         opt.dataset.organization = r.organization || '';
@@ -540,7 +540,7 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
 
     this.selectedResource = assigned;
     const note = document.getElementById('resourceNote');
-    if (note) note.textContent = `Asignado: ${assigned.name} (${assigned.resourceId})`;
+    if (note) note.textContent = `Asignado: (${assigned.resourceId}) ${assigned.name} `;
     this.setStatus(`Técnico asignado: ${assigned.name}`, 'success');
     // Enable the confirm button now that a resource has been explicitly assigned
     if (this.elements.confirmBtn) this.elements.confirmBtn.disabled = false;
