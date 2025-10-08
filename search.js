@@ -3,6 +3,7 @@
 
 let urln8n;
 let Autorizacion;
+let ulogin;
 
 class SearchPlugin {
   constructor() {
@@ -34,6 +35,7 @@ class SearchPlugin {
 
     urln8n = data.securedData.n8nUrl;
     Autorizacion = data.securedData.Authorization;
+    ulogin = data.user.ulogin;
 
     console.log('openMessage recibido:', data);
 
@@ -179,6 +181,7 @@ class SearchPlugin {
         console.log('No se detectó host (parent). Mensaje preparado:', payload);
 urln8n='https://dev-api-sie.encontrack.com/webhook/';
 Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1ODYwM2E=';
+ ulogin = 'alberto.sebastian';
 
 
         return false;
@@ -319,6 +322,12 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
       resourceid: String(resourceId),
       woNumber: this.currentSelection.woNumber || this.currentSelection.srNumber || this.currentSelection.woaNumber || ''
     };
+
+    // Attach endTime (hora fin de guardia) if available and the ulogin of the user
+    const endTimeFromSelected = (this.selectedResource && this.selectedResource.endTime) ? this.selectedResource.endTime : (this.currentSelection && this.currentSelection.assignedResource && this.currentSelection.assignedResource.endTime ? this.currentSelection.assignedResource.endTime : '');
+    if (endTimeFromSelected) payload.endTime = endTimeFromSelected;
+    // ulogin provided by openMessage or fallback
+    payload.ulogin = (typeof ulogin !== 'undefined' && ulogin) ? ulogin : '';
     console.log('confirmSelection: prepared payload, url=', uri, 'payload=', payload);
 
     const xhttp = new XMLHttpRequest();
@@ -450,6 +459,15 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
             <button id="assignResourceBtn" class="btn small" style="height:40px;">Asignar</button>
           </div>
         </div>
+
+        <!-- Campo obligatorio: Hora fin -->
+        <div style="display:flex; gap:0.75rem; margin-top:0.75rem; align-items:center;">
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <label for="endTimeSelect" style="font-size:0.82rem; margin:0;">Hora Fin de Guardia</label>
+            <select id="endTimeSelect" style="padding:0.42rem; border-radius:6px; border:1px solid #ccc; width:160px;"></select>
+          </div>
+        </div>
+
         <div id="resourceNote" style="margin-top:0.5rem; font-size:0.85rem; color:var(--text-muted);"></div>
       `;
       this.elements.selectedDetails.appendChild(container);
@@ -480,11 +498,12 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
         const o = document.createElement('option'); o.value = org; o.textContent = org; orgSelect.appendChild(o);
       });
 
-      // If previously assigned resource exists, preselect its organization
+      // If previously assigned resource exists, preselect its organization.
+      // Otherwise leave the placeholder selected so the user must choose explicitly.
       if (this.selectedResource && this.selectedResource.organization) {
         orgSelect.value = this.selectedResource.organization;
-      } else if (orgs.length > 0) {
-        orgSelect.value = orgs[0];
+      } else {
+        orgSelect.value = '';
       }
     }
 
@@ -516,6 +535,23 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
       this._populateTechsForOrg(orgSelect.value);
     }
 
+    // populate endTimeSelect with whole hours (00:00 - 23:00)
+    const endSelect = container.querySelector('#endTimeSelect');
+    if (endSelect) {
+      endSelect.innerHTML = '';
+      const emptyOpt = document.createElement('option'); emptyOpt.value = ''; emptyOpt.textContent = '-- Selecciona hora --'; endSelect.appendChild(emptyOpt);
+      for (let h = 0; h < 24; h++) {
+        // Omitir horas 01 a 08 según requisito
+        if (h >= 0 && h <= 9) continue;
+        const hh = String(h).padStart(2, '0');
+        const opt = document.createElement('option'); opt.value = `${hh}:00`; opt.textContent = `${hh}:00`; endSelect.appendChild(opt);
+      }
+      // Preselect if previously assigned
+      if (this.selectedResource && this.selectedResource.endTime) {
+        endSelect.value = this.selectedResource.endTime;
+      }
+    }
+
     // Preselect if previously assigned
     // (handled by org->tech population above)
   }
@@ -541,8 +577,24 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
     this.selectedResource = assigned;
     const note = document.getElementById('resourceNote');
     if (note) note.textContent = `Asignado: (${assigned.resourceId}) ${assigned.name} `;
-    this.setStatus(`Técnico asignado: ${assigned.name}`, 'success');
-    // Enable the confirm button now that a resource has been explicitly assigned
+
+    // Validación: el campo "Hora fin" es obligatorio (select de horas)
+    const endSelect = document.getElementById('endTimeSelect');
+    const endVal = endSelect ? endSelect.value : '';
+    if (!endVal) {
+      if (endSelect) { endSelect.style.borderColor = 'var(--error-color)'; endSelect.focus(); }
+      this.setStatus('Selecciona la hora de fin de guardia antes de asignar.', 'warning');
+      return;
+    }
+    // Guardar la hora de fin en la selección y en el recurso asignado
+    assigned.endTime = endVal;
+    this.selectedResource = assigned;
+    if (this.currentSelection) {
+      this.currentSelection.assignedResource = Object.assign({}, assigned);
+    }
+
+    this.setStatus(`Técnico asignado: ${assigned.name} (Fin de Guardia: ${endVal})`, 'success');
+    // Enable the confirm button now that a resource + hora fin have been explicitly assigned
     if (this.elements.confirmBtn) this.elements.confirmBtn.disabled = false;
   }
 
