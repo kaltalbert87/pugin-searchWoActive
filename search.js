@@ -535,17 +535,37 @@ Autorizacion='Basic aW50ZWdyYXRvckZTTTozMGVhODc5OC0zNGFkLTQwZTgtODY4MC1hNGU2Nzc1
       this._populateTechsForOrg(orgSelect.value);
     }
 
-    // populate endTimeSelect with whole hours (00:00 - 23:00)
+    // populate endTimeSelect with whole hours posterior a la hora actual hasta las 20:00
     const endSelect = container.querySelector('#endTimeSelect');
     if (endSelect) {
       endSelect.innerHTML = '';
       const emptyOpt = document.createElement('option'); emptyOpt.value = ''; emptyOpt.textContent = '-- Selecciona hora --'; endSelect.appendChild(emptyOpt);
-      for (let h = 0; h < 24; h++) {
+      
+      // Solo mostrar horas posteriores a la hora actual y hasta las 20:00
+      const now = new Date();
+      const nowHour = now.getHours();
+      let added = 0;
+      
+      for (let h = 0; h <= 20; h++) {
         // Omitir horas 01 a 08 según requisito
-        if (h >= 0 && h <= 9) continue;
+        if (h >= 1 && h <= 8) continue;
+        // Mostrar solo horas posteriores a la hora actual
+        if (h <= nowHour) continue;
+        
         const hh = String(h).padStart(2, '0');
-        const opt = document.createElement('option'); opt.value = `${hh}:00`; opt.textContent = `${hh}:00`; endSelect.appendChild(opt);
+        const opt = document.createElement('option');
+        opt.value = `${hh}:00`;
+        opt.textContent = `${hh}:00`;
+        endSelect.appendChild(opt);
+        added++;
       }
+      
+      // Si no hay horas disponibles, informar al usuario
+      if (added === 0) {
+        const noteEl = document.getElementById('resourceNote');
+        if (noteEl) noteEl.textContent = 'No hay horas posteriores disponibles hoy (límite hasta 20:00).';
+      }
+      
       // Preselect if previously assigned
       if (this.selectedResource && this.selectedResource.endTime) {
         endSelect.value = this.selectedResource.endTime;
